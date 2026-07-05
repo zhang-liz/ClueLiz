@@ -5,6 +5,7 @@
 ![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-blue)
 ![Swift](https://img.shields.io/badge/swift-5.10-orange)
 ![SwiftPM](https://img.shields.io/badge/SwiftPM-compatible-brightgreen)
+[![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 
 Clueless sits in an always-on-top panel next to your meeting. It transcribes your microphone **and** the other participants' audio (via system-audio capture), and turns the live transcript into help you can actually use mid-call: what to say next, follow-up questions, fact checks, definitions of jargon the moment it comes up, and answers to anything on your screen — one hotkey away.
 
@@ -127,3 +128,7 @@ Issues and pull requests are welcome. Before opening a PR:
 1. `make test` — all suites must pass.
 2. Keep pure logic in `CluelessCore` (with tests); keep AppKit/SwiftUI in the app target.
 3. Match the existing code style — small files, doc comments on public types.
+
+## License
+
+[MIT](LICENSE) © Liz Zhang
