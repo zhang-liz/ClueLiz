@@ -1,10 +1,10 @@
-# Clueless Meeting Assistant Implementation Plan
+# ClueLiz Meeting Assistant Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the Clueless native macOS meeting assistant per `docs/superpowers/specs/2026-07-05-meeting-assistant-design.md` — live transcription overlay with AI insights, packaged as a dmg.
+**Goal:** Build the ClueLiz native macOS meeting assistant per `docs/superpowers/specs/2026-07-05-meeting-assistant-design.md` — live transcription overlay with AI insights, packaged as a dmg.
 
-**Architecture:** Pure-SPM Swift project. Library target `CluelessCore` holds all pure logic (models, transcript store, chip detection, prompt building, SSE/LLM/Deepgram parsing) and is fully unit-tested. Executable target `Clueless` holds UI (SwiftUI in a non-activating NSPanel) and system services (ScreenCaptureKit, AVAudioEngine, WebSocket, EventKit, Keychain, hotkeys). Build machine has Command Line Tools only — no Xcode, no xcodebuild; `.app` is assembled by script.
+**Architecture:** Pure-SPM Swift project. Library target `ClueLizCore` holds all pure logic (models, transcript store, chip detection, prompt building, SSE/LLM/Deepgram parsing) and is fully unit-tested. Executable target `ClueLiz` holds UI (SwiftUI in a non-activating NSPanel) and system services (ScreenCaptureKit, AVAudioEngine, WebSocket, EventKit, Keychain, hotkeys). Build machine has Command Line Tools only — no Xcode, no xcodebuild; `.app` is assembled by script.
 
 **Tech Stack:** Swift 6.1 (Swift 5 language mode), SwiftUI + AppKit, ScreenCaptureKit, AVAudioEngine, URLSessionWebSocketTask, PDFKit, EventKit, Carbon hotkeys, Deepgram streaming STT, Gemini 2.5 Flash-Lite (live LLM), Claude Opus 4.8 (summary LLM).
 
@@ -17,7 +17,7 @@
 - Deepgram: `wss://api.deepgram.com/v1/listen` with `encoding=linear16&sample_rate=16000&channels=1&interim_results=true&punctuate=true&diarize=true&model=nova-3`, auth header `Authorization: Token <key>`
 - All streamed responses render token-by-token; in-flight insight request cancelled when a new action fires
 - API keys live in macOS Keychain only — never in files or UserDefaults
-- App bundle ID: `com.clueless.app`; ad-hoc codesign (`codesign -s -`) unless `SIGN_ID` env var set
+- App bundle ID: `com.clueliz.app`; ad-hoc codesign (`codesign -s -`) unless `SIGN_ID` env var set
 - Run unit tests with `swift test`; UI/system tasks end with a build + manual verify step
 - Commit after every green step; messages concise per repo CLAUDE.md
 
@@ -27,13 +27,13 @@
 
 **Files:**
 - Create: `Package.swift`, `.gitignore`
-- Create: `Sources/CluelessCore/Models.swift` (placeholder types only — real content Task 2)
-- Create: `Sources/Clueless/CluelessApp.swift`, `Sources/Clueless/AppDelegate.swift`
+- Create: `Sources/ClueLizCore/Models.swift` (placeholder types only — real content Task 2)
+- Create: `Sources/ClueLiz/ClueLizApp.swift`, `Sources/ClueLiz/AppDelegate.swift`
 - Create: `Resources/Info.plist`, `scripts/bundle.sh`, `Makefile`
 - Test: none (pipeline verification)
 
 **Interfaces:**
-- Produces: buildable SPM layout; `make build` → binary; `make app` → runnable `dist/Clueless.app`; `make test` → `swift test`
+- Produces: buildable SPM layout; `make build` → binary; `make app` → runnable `dist/ClueLiz.app`; `make test` → `swift test`
 
 - [ ] **Step 1: Write Package.swift + .gitignore**
 
@@ -42,16 +42,16 @@
 import PackageDescription
 
 let package = Package(
-    name: "Clueless",
+    name: "ClueLiz",
     platforms: [.macOS(.v14)],
     targets: [
-        .target(name: "CluelessCore", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(name: "ClueLizCore", swiftSettings: [.swiftLanguageMode(.v5)]),
         .executableTarget(
-            name: "Clueless",
-            dependencies: ["CluelessCore"],
+            name: "ClueLiz",
+            dependencies: ["ClueLizCore"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
-        .testTarget(name: "CluelessCoreTests", dependencies: ["CluelessCore"],
+        .testTarget(name: "ClueLizCoreTests", dependencies: ["ClueLizCore"],
                     swiftSettings: [.swiftLanguageMode(.v5)])
     ]
 )
@@ -61,12 +61,12 @@ let package = Package(
 
 - [ ] **Step 2: Minimal app entry**
 
-`CluelessApp.swift`:
+`ClueLizApp.swift`:
 ```swift
 import SwiftUI
 
 @main
-struct CluelessApp: App {
+struct ClueLizApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     var body: some Scene {
         Settings { EmptyView() }   // real windows are managed by AppDelegate
@@ -83,14 +83,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         let alertWindow = NSWindow(contentRect: .init(x: 0, y: 0, width: 300, height: 100),
                                    styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        alertWindow.title = "Clueless"
+        alertWindow.title = "ClueLiz"
         alertWindow.center()
         alertWindow.makeKeyAndOrderFront(nil)   // placeholder — replaced by overlay in Task 10
     }
 }
 ```
 
-`Models.swift`: `public enum CluelessCoreMarker {}` (placeholder so target compiles).
+`Models.swift`: `public enum ClueLizCoreMarker {}` (placeholder so target compiles).
 
 - [ ] **Step 3: Info.plist + bundle script + Makefile**
 
@@ -99,9 +99,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-    <key>CFBundleIdentifier</key><string>com.clueless.app</string>
-    <key>CFBundleName</key><string>Clueless</string>
-    <key>CFBundleExecutable</key><string>Clueless</string>
+    <key>CFBundleIdentifier</key><string>com.clueliz.app</string>
+    <key>CFBundleName</key><string>ClueLiz</string>
+    <key>CFBundleExecutable</key><string>ClueLiz</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>1.0</string>
     <key>CFBundleVersion</key><string>1</string>
@@ -109,9 +109,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     <key>NSPrincipalClass</key><string>NSApplication</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Clueless transcribes your side of the meeting from the microphone.</string>
+    <string>ClueLiz transcribes your side of the meeting from the microphone.</string>
     <key>NSCalendarsFullAccessUsageDescription</key>
-    <string>Clueless uses your calendar to detect when meetings start and end.</string>
+    <string>ClueLiz uses your calendar to detect when meetings start and end.</string>
 </dict></plist>
 ```
 
@@ -121,10 +121,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 set -euo pipefail
 CONFIG="${1:-release}"
 swift build -c "$CONFIG"
-APP=dist/Clueless.app
+APP=dist/ClueLiz.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp ".build/$CONFIG/Clueless" "$APP/Contents/MacOS/Clueless"
+cp ".build/$CONFIG/ClueLiz" "$APP/Contents/MacOS/ClueLiz"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 codesign --force --deep -s "${SIGN_ID:--}" "$APP"
 echo "Built $APP"
@@ -136,14 +136,14 @@ echo "Built $APP"
 build: ; swift build
 test: ; swift test
 app: ; bash scripts/bundle.sh release
-run: app ; open dist/Clueless.app
+run: app ; open dist/ClueLiz.app
 dmg: app ; bash scripts/make-dmg.sh   # script added in Task 16
 ```
 
 - [ ] **Step 4: Verify build + launch**
 
 Run: `swift build && make app`
-Expected: `Built dist/Clueless.app`. `open dist/Clueless.app` shows the placeholder window.
+Expected: `Built dist/ClueLiz.app`. `open dist/ClueLiz.app` shows the placeholder window.
 
 - [ ] **Step 5: Commit** — `feat: SPM skeleton, app bundle pipeline`
 
@@ -152,9 +152,9 @@ Expected: `Built dist/Clueless.app`. `open dist/Clueless.app` shows the placehol
 ### Task 2: Core models + TranscriptStore
 
 **Files:**
-- Modify: `Sources/CluelessCore/Models.swift` (replace placeholder)
-- Create: `Sources/CluelessCore/TranscriptStore.swift`
-- Test: `Tests/CluelessCoreTests/TranscriptStoreTests.swift`
+- Modify: `Sources/ClueLizCore/Models.swift` (replace placeholder)
+- Create: `Sources/ClueLizCore/TranscriptStore.swift`
+- Test: `Tests/ClueLizCoreTests/TranscriptStoreTests.swift`
 
 **Interfaces:**
 - Produces:
@@ -167,7 +167,7 @@ Expected: `Built dist/Clueless.app`. `open dist/Clueless.app` shows the placehol
 
 ```swift
 import XCTest
-@testable import CluelessCore
+@testable import ClueLizCore
 
 final class TranscriptStoreTests: XCTestCase {
     func testPartialCreatesMutableTurnPerSpeaker() {
@@ -234,8 +234,8 @@ final class TranscriptStoreTests: XCTestCase {
 ### Task 3: ChipDetector (local question detection)
 
 **Files:**
-- Create: `Sources/CluelessCore/Chip.swift`, `Sources/CluelessCore/ChipDetector.swift`
-- Test: `Tests/CluelessCoreTests/ChipDetectorTests.swift`
+- Create: `Sources/ClueLizCore/Chip.swift`, `Sources/ClueLizCore/ChipDetector.swift`
+- Test: `Tests/ClueLizCoreTests/ChipDetectorTests.swift`
 
 **Interfaces:**
 - Produces:
@@ -247,7 +247,7 @@ final class TranscriptStoreTests: XCTestCase {
 
 ```swift
 import XCTest
-@testable import CluelessCore
+@testable import ClueLizCore
 
 final class ChipDetectorTests: XCTestCase {
     func testDetectsQuestionMark() {
@@ -280,8 +280,8 @@ final class ChipDetectorTests: XCTestCase {
 ### Task 4: SSEParser
 
 **Files:**
-- Create: `Sources/CluelessCore/SSEParser.swift`
-- Test: `Tests/CluelessCoreTests/SSEParserTests.swift`
+- Create: `Sources/ClueLizCore/SSEParser.swift`
+- Test: `Tests/ClueLizCoreTests/SSEParserTests.swift`
 
 **Interfaces:**
 - Produces: `public struct SSEParser { public init(); public mutating func feed(_ data: Data) -> [String] }`
@@ -291,7 +291,7 @@ final class ChipDetectorTests: XCTestCase {
 
 ```swift
 import XCTest
-@testable import CluelessCore
+@testable import ClueLizCore
 
 final class SSEParserTests: XCTestCase {
     func testSingleEvent() {
@@ -327,9 +327,9 @@ final class SSEParserTests: XCTestCase {
 ### Task 5: LLM provider layer (Gemini + Anthropic)
 
 **Files:**
-- Create: `Sources/CluelessCore/LLM.swift` (request/response types + protocol)
-- Create: `Sources/CluelessCore/GeminiProvider.swift`, `Sources/CluelessCore/AnthropicProvider.swift`
-- Test: `Tests/CluelessCoreTests/LLMProviderTests.swift`
+- Create: `Sources/ClueLizCore/LLM.swift` (request/response types + protocol)
+- Create: `Sources/ClueLizCore/GeminiProvider.swift`, `Sources/ClueLizCore/AnthropicProvider.swift`
+- Test: `Tests/ClueLizCoreTests/LLMProviderTests.swift`
 
 **Interfaces:**
 - Produces:
@@ -347,7 +347,7 @@ final class SSEParserTests: XCTestCase {
 
 ```swift
 import XCTest
-@testable import CluelessCore
+@testable import ClueLizCore
 
 final class LLMProviderTests: XCTestCase {
     func testGeminiRequestEncoding() throws {
@@ -410,8 +410,8 @@ final class LLMProviderTests: XCTestCase {
 ### Task 6: PromptBuilder
 
 **Files:**
-- Create: `Sources/CluelessCore/InsightAction.swift`, `Sources/CluelessCore/PromptBuilder.swift`
-- Test: `Tests/CluelessCoreTests/PromptBuilderTests.swift`
+- Create: `Sources/ClueLizCore/InsightAction.swift`, `Sources/ClueLizCore/PromptBuilder.swift`
+- Test: `Tests/ClueLizCoreTests/PromptBuilderTests.swift`
 
 **Interfaces:**
 - Produces:
@@ -429,7 +429,7 @@ final class LLMProviderTests: XCTestCase {
 
 ```swift
 import XCTest
-@testable import CluelessCore
+@testable import ClueLizCore
 
 final class PromptBuilderTests: XCTestCase {
     let ctx = PromptContext(transcript: "Me: hi\nThem: we need SSO by Q3",
@@ -478,9 +478,9 @@ final class PromptBuilderTests: XCTestCase {
 ### Task 7: Deepgram parsing + streaming client
 
 **Files:**
-- Create: `Sources/CluelessCore/DeepgramMessageParser.swift`
-- Create: `Sources/Clueless/Services/DeepgramStreamClient.swift`
-- Test: `Tests/CluelessCoreTests/DeepgramMessageParserTests.swift`
+- Create: `Sources/ClueLizCore/DeepgramMessageParser.swift`
+- Create: `Sources/ClueLiz/Services/DeepgramStreamClient.swift`
+- Test: `Tests/ClueLizCoreTests/DeepgramMessageParserTests.swift`
 
 **Interfaces:**
 - Produces (Core):
@@ -494,7 +494,7 @@ final class PromptBuilderTests: XCTestCase {
 
 ```swift
 import XCTest
-@testable import CluelessCore
+@testable import ClueLizCore
 
 final class DeepgramMessageParserTests: XCTestCase {
     func testParsesFinalWithSpeaker() {
@@ -531,20 +531,20 @@ final class DeepgramMessageParserTests: XCTestCase {
 ### Task 8: KeychainStore + Settings window
 
 **Files:**
-- Create: `Sources/Clueless/Services/KeychainStore.swift`
-- Create: `Sources/Clueless/UI/SettingsView.swift`
-- Modify: `Sources/Clueless/AppDelegate.swift` (menu item + window to open Settings)
+- Create: `Sources/ClueLiz/Services/KeychainStore.swift`
+- Create: `Sources/ClueLiz/UI/SettingsView.swift`
+- Modify: `Sources/ClueLiz/AppDelegate.swift` (menu item + window to open Settings)
 
 **Interfaces:**
 - Produces:
   - `enum APIKeyName: String, CaseIterable { case deepgram, gemini, anthropic; var displayName: String }`
-  - `struct KeychainStore { static func set(_ value: String, for key: APIKeyName) throws; static func get(_ key: APIKeyName) -> String?; static func delete(_ key: APIKeyName) throws }` — generic-password items, service `com.clueless.app`, account = raw value
+  - `struct KeychainStore { static func set(_ value: String, for key: APIKeyName) throws; static func get(_ key: APIKeyName) -> String?; static func delete(_ key: APIKeyName) throws }` — generic-password items, service `com.clueliz.app`, account = raw value
   - `SettingsView: View` — SecureFields for the three keys (load on appear, save on change), placeholder section "Context files" (filled Task 13), hotkey hint text
 - Consumes: nothing from Core
 
 - [ ] **Step 1: Implement KeychainStore** (SecItemAdd/CopyMatching/Update/Delete; `kSecClassGenericPassword`)
 - [ ] **Step 2: Implement SettingsView + AppDelegate wiring** (Cmd+, opens window; standard NSWindow with NSHostingView)
-- [ ] **Step 3: Verify** — `make run`; open Settings; paste dummy key; quit; relaunch; key still shown. `security find-generic-password -s com.clueless.app -a deepgram -w` prints it.
+- [ ] **Step 3: Verify** — `make run`; open Settings; paste dummy key; quit; relaunch; key still shown. `security find-generic-password -s com.clueliz.app -a deepgram -w` prints it.
 - [ ] **Step 4: Commit** — `feat: keychain-backed API key settings`
 
 ---
@@ -552,8 +552,8 @@ final class DeepgramMessageParserTests: XCTestCase {
 ### Task 9: Audio capture + live transcription wiring
 
 **Files:**
-- Create: `Sources/Clueless/Services/MicTap.swift`, `Sources/Clueless/Services/SystemAudioTap.swift`
-- Create: `Sources/Clueless/Services/TranscriptionService.swift`
+- Create: `Sources/ClueLiz/Services/MicTap.swift`, `Sources/ClueLiz/Services/SystemAudioTap.swift`
+- Create: `Sources/ClueLiz/Services/TranscriptionService.swift`
 
 **Interfaces:**
 - Produces:
@@ -573,10 +573,10 @@ final class DeepgramMessageParserTests: XCTestCase {
 ### Task 10: Overlay window + core UI
 
 **Files:**
-- Create: `Sources/Clueless/UI/OverlayPanel.swift` — NSPanel subclass
-- Create: `Sources/Clueless/UI/OverlayView.swift` — root SwiftUI (transcript + insights + chips + chat bar)
-- Create: `Sources/Clueless/AppState.swift` — `@MainActor final class AppState: ObservableObject`
-- Modify: `Sources/Clueless/AppDelegate.swift` — replace placeholder window with overlay
+- Create: `Sources/ClueLiz/UI/OverlayPanel.swift` — NSPanel subclass
+- Create: `Sources/ClueLiz/UI/OverlayView.swift` — root SwiftUI (transcript + insights + chips + chat bar)
+- Create: `Sources/ClueLiz/AppState.swift` — `@MainActor final class AppState: ObservableObject`
+- Modify: `Sources/ClueLiz/AppDelegate.swift` — replace placeholder window with overlay
 
 **Interfaces:**
 - Produces:
@@ -597,8 +597,8 @@ final class DeepgramMessageParserTests: XCTestCase {
 ### Task 11: InsightEngine wiring (actions, chips loop, chat)
 
 **Files:**
-- Create: `Sources/Clueless/Services/InsightEngine.swift`
-- Modify: `Sources/Clueless/AppState.swift` (real method bodies delegate to engine)
+- Create: `Sources/ClueLiz/Services/InsightEngine.swift`
+- Modify: `Sources/ClueLiz/AppState.swift` (real method bodies delegate to engine)
 
 **Interfaces:**
 - Produces:
@@ -619,8 +619,8 @@ final class DeepgramMessageParserTests: XCTestCase {
 ### Task 12: Screen-answer hotkey + snapshot
 
 **Files:**
-- Create: `Sources/Clueless/Services/ScreenSnapshotService.swift`, `Sources/Clueless/Services/HotkeyManager.swift`
-- Modify: `Sources/Clueless/AppState.swift`, `Sources/Clueless/AppDelegate.swift`
+- Create: `Sources/ClueLiz/Services/ScreenSnapshotService.swift`, `Sources/ClueLiz/Services/HotkeyManager.swift`
+- Modify: `Sources/ClueLiz/AppState.swift`, `Sources/ClueLiz/AppDelegate.swift`
 
 **Interfaces:**
 - Produces:
@@ -638,10 +638,10 @@ final class DeepgramMessageParserTests: XCTestCase {
 ### Task 13: File context (ContextStore + parsers)
 
 **Files:**
-- Create: `Sources/CluelessCore/ContextStore.swift`
-- Create: `Sources/Clueless/Services/FileImporter.swift`
-- Modify: `Sources/Clueless/UI/SettingsView.swift` (real "Context files" section)
-- Test: `Tests/CluelessCoreTests/ContextStoreTests.swift`
+- Create: `Sources/ClueLizCore/ContextStore.swift`
+- Create: `Sources/ClueLiz/Services/FileImporter.swift`
+- Modify: `Sources/ClueLiz/UI/SettingsView.swift` (real "Context files" section)
+- Test: `Tests/ClueLizCoreTests/ContextStoreTests.swift`
 
 **Interfaces:**
 - Produces (Core):
@@ -655,7 +655,7 @@ final class DeepgramMessageParserTests: XCTestCase {
 
 ```swift
 import XCTest
-@testable import CluelessCore
+@testable import ClueLizCore
 
 final class ContextStoreTests: XCTestCase {
     func testCombinedTextFormatsAndTruncates() {
@@ -686,11 +686,11 @@ final class ContextStoreTests: XCTestCase {
 ### Task 14: SessionManager (lifecycle, calendar, persistence, summary)
 
 **Files:**
-- Create: `Sources/CluelessCore/SessionRecord.swift`
-- Create: `Sources/Clueless/Services/SessionManager.swift`
-- Create: `Sources/Clueless/UI/SummaryView.swift`
-- Modify: `Sources/Clueless/AppState.swift`, `Sources/Clueless/AppDelegate.swift`
-- Test: `Tests/CluelessCoreTests/SessionRecordTests.swift`
+- Create: `Sources/ClueLizCore/SessionRecord.swift`
+- Create: `Sources/ClueLiz/Services/SessionManager.swift`
+- Create: `Sources/ClueLiz/UI/SummaryView.swift`
+- Modify: `Sources/ClueLiz/AppState.swift`, `Sources/ClueLiz/AppDelegate.swift`
+- Test: `Tests/ClueLizCoreTests/SessionRecordTests.swift`
 
 **Interfaces:**
 - Produces (Core):
@@ -698,7 +698,7 @@ final class ContextStoreTests: XCTestCase {
 - Produces (App):
   - `final class SessionManager` — responsibilities:
     - `start()` / `end()` mutate a current `SessionRecord`
-    - 10 s timer flushes record JSON to `~/Library/Application Support/Clueless/sessions/<id>.json`
+    - 10 s timer flushes record JSON to `~/Library/Application Support/ClueLiz/sessions/<id>.json`
     - On init: if newest session file has `endedAt == nil` → expose `recoverableSession: SessionRecord?` (AppState offers "Resume session" alert)
     - Calendar: `EKEventStore.requestFullAccessToEvents`; poll every 60 s; event with URL/notes containing zoom/meet/teams link starting now → `onMeetingDetected(title:attendees:)` (AppState shows "Start session?" prompt); event end + 2 min → `onMeetingLikelyEnded`
     - Silence: fed `lastAudioActivity: Date` from TranscriptionService; >10 min → `onSilenceTimeout` (AppState confirm dialog)
@@ -710,7 +710,7 @@ final class ContextStoreTests: XCTestCase {
 
 ```swift
 import XCTest
-@testable import CluelessCore
+@testable import ClueLizCore
 
 final class SessionRecordTests: XCTestCase {
     func testCodableRoundTrip() throws {
@@ -743,15 +743,15 @@ final class SessionRecordTests: XCTestCase {
 ### Task 15: Onboarding + error surfaces polish
 
 **Files:**
-- Create: `Sources/Clueless/UI/OnboardingView.swift`
-- Modify: `Sources/Clueless/AppDelegate.swift`, `Sources/Clueless/UI/OverlayView.swift`
+- Create: `Sources/ClueLiz/UI/OnboardingView.swift`
+- Modify: `Sources/ClueLiz/AppDelegate.swift`, `Sources/ClueLiz/UI/OverlayView.swift`
 
 **Interfaces:**
 - Produces: first-run (UserDefaults flag) onboarding window: 4 pages — welcome, mic permission (trigger + status), screen recording (open System Settings deep-link `x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture`), calendar (optional), API keys (inline fields reusing KeychainStore)
 - Overlay polish: `errorBanner` display + retry, "reconnecting" pill when Deepgram down, action buttons disabled with tooltip when key missing, session start disabled until mic or screen permission granted
 
 - [ ] **Step 1: Implement OnboardingView + gating**
-- [ ] **Step 2: Manual verify** — `tccutil reset Microphone com.clueless.app; tccutil reset ScreenCapture com.clueless.app`, delete UserDefaults flag, relaunch → onboarding walks through grants; deny screen recording → transcript still works mic-only with inline hint
+- [ ] **Step 2: Manual verify** — `tccutil reset Microphone com.clueliz.app; tccutil reset ScreenCapture com.clueliz.app`, delete UserDefaults flag, relaunch → onboarding walks through grants; deny screen recording → transcript still works mic-only with inline hint
 - [ ] **Step 3: Commit** — `feat: first-run onboarding and graceful permission degradation`
 
 ---
@@ -763,7 +763,7 @@ final class SessionRecordTests: XCTestCase {
 - Modify: `Makefile` (dmg target already references it), `README.md` (create: install + right-click-open note, key setup)
 
 **Interfaces:**
-- Produces: `dist/Clueless.dmg` with app + `/Applications` symlink
+- Produces: `dist/ClueLiz.dmg` with app + `/Applications` symlink
 
 - [ ] **Step 1: Write make-dmg.sh**
 
@@ -772,15 +772,15 @@ final class SessionRecordTests: XCTestCase {
 set -euo pipefail
 bash scripts/bundle.sh release
 STAGE=$(mktemp -d)
-cp -R dist/Clueless.app "$STAGE/"
+cp -R dist/ClueLiz.app "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
-rm -f dist/Clueless.dmg
-hdiutil create -volname "Clueless" -srcfolder "$STAGE" -ov -format UDZO dist/Clueless.dmg
+rm -f dist/ClueLiz.dmg
+hdiutil create -volname "ClueLiz" -srcfolder "$STAGE" -ov -format UDZO dist/ClueLiz.dmg
 rm -rf "$STAGE"
-echo "Built dist/Clueless.dmg"
+echo "Built dist/ClueLiz.dmg"
 ```
 
-- [ ] **Step 2: Run** `make dmg` — expect `Built dist/Clueless.dmg`; mount it, drag to /Applications, launch from there (right-click → Open first time)
+- [ ] **Step 2: Run** `make dmg` — expect `Built dist/ClueLiz.dmg`; mount it, drag to /Applications, launch from there (right-click → Open first time)
 - [ ] **Step 3: Full manual smoke pass** (spec §7): play test meeting audio → live transcript both speakers → chips → all 5 actions → chat + Smart Mode → ⌘⇧Return screen answer → file upload referenced → end session → summary → export .md → crash-resume
 - [ ] **Step 4: Run** `swift test` — all green
 - [ ] **Step 5: Commit** — `feat: dmg packaging and README`

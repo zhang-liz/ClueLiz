@@ -1,5 +1,5 @@
 import SwiftUI
-import CluelessCore
+import ClueLizCore
 
 /// Post-meeting summary window: streams the Opus summary, then offers
 /// copy / save-as-Markdown.

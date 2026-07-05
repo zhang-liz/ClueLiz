@@ -1,5 +1,5 @@
 import Testing
-@testable import CluelessCore
+@testable import ClueLizCore
 
 @Suite struct PromptBuilderTests {
     let ctx = PromptContext(transcript: "Me: hi\nThem: we need SSO by Q3",

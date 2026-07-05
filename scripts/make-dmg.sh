@@ -3,9 +3,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 bash scripts/bundle.sh release
 STAGE=$(mktemp -d)
-cp -R dist/Clueless.app "$STAGE/"
+cp -R dist/ClueLiz.app "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
-rm -f dist/Clueless.dmg
-hdiutil create -volname "Clueless" -srcfolder "$STAGE" -ov -format UDZO dist/Clueless.dmg
+rm -f dist/ClueLiz.dmg
+hdiutil create -volname "ClueLiz" -srcfolder "$STAGE" -ov -format UDZO dist/ClueLiz.dmg
 rm -rf "$STAGE"
-echo "Built dist/Clueless.dmg"
+echo "Built dist/ClueLiz.dmg"

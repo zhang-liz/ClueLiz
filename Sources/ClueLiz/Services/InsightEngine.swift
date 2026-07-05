@@ -1,5 +1,5 @@
 import Foundation
-import CluelessCore
+import ClueLizCore
 
 /// Orchestrates all LLM work: insight actions, freeform chat, screen answers,
 /// and the suggestion-chip loop. One in-flight insight request at a time —

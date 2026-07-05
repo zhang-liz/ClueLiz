@@ -51,7 +51,7 @@ struct OnboardingView: View {
         case 0:
             VStack(spacing: 12) {
                 Image(systemName: "waveform.badge.mic").font(.system(size: 48))
-                Text("Welcome to Clueless").font(.title).bold()
+                Text("Welcome to ClueLiz").font(.title).bold()
                 Text("""
                 Your real-time meeting copilot: live transcript, instant AI insights, \
                 and a clean summary when the meeting ends. A few permissions make it work.
@@ -78,7 +78,7 @@ struct OnboardingView: View {
                 title: "Screen Recording",
                 explanation: """
                 Captures the other participants' audio and powers the "Get Answer" \
-                screen hotkey. macOS may ask you to relaunch Clueless after granting.
+                screen hotkey. macOS may ask you to relaunch ClueLiz after granting.
                 """,
                 granted: screenGranted,
                 grantAction: {

@@ -2,11 +2,11 @@
 import PackageDescription
 
 let package = Package(
-    name: "Clueless",
+    name: "ClueLiz",
     platforms: [.macOS(.v14)],
     targets: [
-        .target(name: "CluelessCore"),
-        .executableTarget(name: "Clueless", dependencies: ["CluelessCore"]),
-        .testTarget(name: "CluelessCoreTests", dependencies: ["CluelessCore"])
+        .target(name: "ClueLizCore"),
+        .executableTarget(name: "ClueLiz", dependencies: ["ClueLizCore"]),
+        .testTarget(name: "ClueLizCoreTests", dependencies: ["ClueLizCore"])
     ]
 )

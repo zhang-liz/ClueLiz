@@ -1,5 +1,5 @@
 import SwiftUI
-import CluelessCore
+import ClueLizCore
 
 /// Root overlay content: header, live transcript, insights card, chips, chat bar.
 struct OverlayView: View {
@@ -48,7 +48,7 @@ struct OverlayView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Text("Clueless").font(.headline)
+            Text("ClueLiz").font(.headline)
             if appState.reconnecting {
                 Label("reconnecting", systemImage: "wifi.exclamationmark")
                     .font(.caption)

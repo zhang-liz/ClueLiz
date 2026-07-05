@@ -1,5 +1,5 @@
 import Testing
-@testable import CluelessCore
+@testable import ClueLizCore
 
 @Suite struct TranscriptStoreTests {
     @Test func partialCreatesMutableTurnPerSpeaker() {

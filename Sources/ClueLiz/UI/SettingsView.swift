@@ -1,5 +1,5 @@
 import SwiftUI
-import CluelessCore
+import ClueLizCore
 
 struct SettingsView: View {
     @ObservedObject var contextStore: FileContextStore

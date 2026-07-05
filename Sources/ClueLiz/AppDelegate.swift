@@ -1,6 +1,6 @@
 import AppKit
 import SwiftUI
-import CluelessCore
+import ClueLizCore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
@@ -44,8 +44,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let alert = NSAlert()
             alert.messageText = "Meeting starting: \(title)"
             alert.informativeText = attendees.isEmpty
-                ? "Start a Clueless session?"
-                : "With \(attendees.joined(separator: ", ")). Start a Clueless session?"
+                ? "Start a ClueLiz session?"
+                : "With \(attendees.joined(separator: ", ")). Start a ClueLiz session?"
             alert.addButton(withTitle: "Start Session")
             alert.addButton(withTitle: "Not Now")
             if alert.runModal() == .alertFirstButtonReturn {
@@ -81,7 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if let recovered = appState.sessionManager.recoverableSession {
             let alert = NSAlert()
             alert.messageText = "Resume previous session?"
-            alert.informativeText = "Clueless didn't shut down cleanly. Resume the session from \(recovered.startedAt.formatted(date: .abbreviated, time: .shortened)) (\(recovered.turns.count) transcript entries)?"
+            alert.informativeText = "ClueLiz didn't shut down cleanly. Resume the session from \(recovered.startedAt.formatted(date: .abbreviated, time: .shortened)) (\(recovered.turns.count) transcript entries)?"
             alert.addButton(withTitle: "Resume")
             alert.addButton(withTitle: "Discard")
             if alert.runModal() == .alertFirstButtonReturn {
@@ -101,7 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "Welcome to Clueless"
+        window.title = "Welcome to ClueLiz"
         window.contentView = NSHostingView(rootView: OnboardingView(contextStore: appState.contextStore) { [weak self] in
             UserDefaults.standard.set(true, forKey: "onboardingDone")
             self?.onboardingWindow?.close()
@@ -143,7 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         appMenu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         appMenu.addItem(withTitle: "Show Overlay", action: #selector(showOverlay), keyEquivalent: "o")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Quit Clueless", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "Quit ClueLiz", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
         // Standard Edit menu — without it, ⌘V/⌘C/⌘X/⌘A do nothing in any text field.
         let editMenuItem = NSMenuItem()
@@ -180,7 +180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 backing: .buffered,
                 defer: false
             )
-            window.title = "Clueless Settings"
+            window.title = "ClueLiz Settings"
             window.contentView = NSHostingView(rootView: SettingsView(contextStore: appState.contextStore))
             window.isReleasedWhenClosed = false
             window.center()

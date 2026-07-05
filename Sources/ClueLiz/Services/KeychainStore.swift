@@ -19,7 +19,7 @@ enum KeychainError: Error {
 
 /// Generic-password Keychain storage for the three API keys.
 enum KeychainStore {
-    private static let service = "com.clueless.app"
+    private static let service = "com.clueliz.app"
 
     private static func baseQuery(for key: APIKeyName) -> [String: Any] {
         [

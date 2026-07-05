@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import CluelessCore
+@testable import ClueLizCore
 
 @Suite struct SessionRecordTests {
     @Test func codableRoundTrip() throws {

@@ -1,6 +1,6 @@
 import Foundation
 import SwiftUI
-import CluelessCore
+import ClueLizCore
 
 /// Single source of truth for the UI. Owns the transcript store and services.
 @MainActor

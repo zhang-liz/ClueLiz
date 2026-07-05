@@ -1,5 +1,5 @@
 import Testing
-@testable import CluelessCore
+@testable import ClueLizCore
 
 @Test func targetCompiles() {
     #expect(Bool(true))

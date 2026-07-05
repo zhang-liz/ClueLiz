@@ -3,7 +3,7 @@ import AppKit
 import ScreenCaptureKit
 
 /// Captures the main display for the "Get Answer" hotkey, excluding the
-/// Clueless overlay itself, downscaled to ≤1600 px wide, returned as PNG.
+/// ClueLiz overlay itself, downscaled to ≤1600 px wide, returned as PNG.
 enum ScreenSnapshotService {
     static func captureMainDisplayPNG() async throws -> Data {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)

@@ -1,4 +1,4 @@
-# Clueless — Real-Time Meeting Assistant for macOS
+# ClueLiz — Real-Time Meeting Assistant for macOS
 
 **Date:** 2026-07-05
 **Status:** Approved design, pre-implementation
@@ -6,7 +6,7 @@
 
 ## 1. Overview
 
-Clueless is a native macOS meeting assistant. During a meeting it captures system and microphone audio, transcribes it live, and shows a floating always-on-top overlay with a live transcript, AI-generated insight actions, auto-detected suggestion chips, and a free-form AI chat bar. After the meeting it produces a shareable summary.
+ClueLiz is a native macOS meeting assistant. During a meeting it captures system and microphone audio, transcribes it live, and shows a floating always-on-top overlay with a live transcript, AI-generated insight actions, auto-detected suggestion chips, and a free-form AI chat bar. After the meeting it produces a shareable summary.
 
 ### Scope
 
@@ -57,7 +57,7 @@ Clueless is a native macOS meeting assistant. During a meeting it captures syste
 Single app process, layered modules. UI layer depends on core layers; core layers are pure Swift with no UI imports. Layers are local Swift packages to enforce the boundary.
 
 ```
-Clueless.app (SwiftUI)
+ClueLiz.app (SwiftUI)
 ├─ UI Layer
 │  ├─ OverlayWindow — NSPanel: floating, non-activating, all-Spaces, draggable
 │  │  ├─ TranscriptPanel — live scroll, partials gray/mutable, finals committed + speaker-tagged
@@ -129,7 +129,7 @@ Default ⌘⇧Return (configurable). Captures the frontmost screen via ScreenCap
 - **Start:** manual button, or prompt when an EventKit calendar event containing a video-call link begins.
 - **End:** manual; calendar event end + 2 min grace; or >10 min audio silence → confirmation dialog.
 - **On end:** full transcript → Opus 4.8 → summary (key takeaways, decisions, next steps, action items) → SummaryWindow → copy as Markdown or save `.md`.
-- **Persistence:** transcript + summary saved under `~/Library/Application Support/Clueless/sessions/`. Transcript flushed to disk every 10 s; on relaunch after a crash the app offers "resume session".
+- **Persistence:** transcript + summary saved under `~/Library/Application Support/ClueLiz/sessions/`. Transcript flushed to disk every 10 s; on relaunch after a crash the app offers "resume session".
 
 ## 5. Permissions
 
@@ -159,8 +159,8 @@ Missing permissions degrade features gracefully with an inline "grant in System 
 
 ## 8. Packaging & distribution
 
-- Pure Swift Package Manager project (no Xcode required — build machine has CLT only): executable target `Clueless` (UI + system services) + library target `CluelessCore` (pure logic, unit-tested).
-- Build: `swift build -c release` → script assembles `Clueless.app` bundle (Info.plist with usage descriptions, ad-hoc codesign) → `hdiutil` → `Clueless.dmg`.
+- Pure Swift Package Manager project (no Xcode required — build machine has CLT only): executable target `ClueLiz` (UI + system services) + library target `ClueLizCore` (pure logic, unit-tested).
+- Build: `swift build -c release` → script assembles `ClueLiz.app` bundle (Info.plist with usage descriptions, ad-hoc codesign) → `hdiutil` → `ClueLiz.dmg`.
 - Signing: Developer ID + notarization when an Apple Developer account is configured; otherwise unsigned dmg (right-click → Open for one-time Gatekeeper bypass). Flag-controlled in the build script.
 - Makefile: `make build`, `make test`, `make dmg`.
 

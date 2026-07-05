@@ -1,6 +1,6 @@
 import Foundation
 import PDFKit
-import CluelessCore
+import ClueLizCore
 
 enum ImportError: Error, LocalizedError {
     case unsupportedType(String)

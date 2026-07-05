@@ -1,6 +1,6 @@
 import Foundation
 import EventKit
-import CluelessCore
+import ClueLizCore
 
 /// Session lifecycle: persistence + crash recovery, calendar-based meeting
 /// detection, silence timeout, and post-meeting summary generation.
@@ -27,7 +27,7 @@ final class SessionManager {
 
     static let sessionsDirectory: URL = {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Clueless/sessions", isDirectory: true)
+            .appendingPathComponent("ClueLiz/sessions", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }()

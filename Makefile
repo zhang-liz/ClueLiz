@@ -10,7 +10,7 @@ app:
 	bash scripts/bundle.sh release
 
 run: app
-	open dist/Clueless.app
+	open dist/ClueLiz.app
 
 dmg: app
 	bash scripts/make-dmg.sh

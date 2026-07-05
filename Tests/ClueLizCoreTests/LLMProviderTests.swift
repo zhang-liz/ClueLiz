@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-@testable import CluelessCore
+@testable import ClueLizCore
 
 @Suite struct LLMProviderTests {
     @Test func geminiRequestEncoding() throws {

@@ -1,5 +1,5 @@
 import Foundation
-import CluelessCore
+import ClueLizCore
 
 /// One live Deepgram WebSocket stream. Feed it 16 kHz mono Int16 PCM; get parsed
 /// results back. Reconnects with backoff on failure, buffering up to ~30 s of audio.

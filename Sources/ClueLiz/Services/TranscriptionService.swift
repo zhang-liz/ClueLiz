@@ -1,5 +1,5 @@
 import Foundation
-import CluelessCore
+import ClueLizCore
 
 /// Wires audio taps to Deepgram streams and routes results into the TranscriptStore.
 /// Mic stream → "Me"; system stream → "Them" (diarized).

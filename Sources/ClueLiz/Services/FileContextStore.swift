@@ -1,5 +1,5 @@
 import Foundation
-import CluelessCore
+import ClueLizCore
 
 /// App-side wrapper around the Core ContextStore: file import + persistence
 /// of imported text across launches.
@@ -9,7 +9,7 @@ final class FileContextStore: ObservableObject {
 
     private let persistenceURL: URL = {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Clueless", isDirectory: true)
+            .appendingPathComponent("ClueLiz", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("context-files.json")
     }()
