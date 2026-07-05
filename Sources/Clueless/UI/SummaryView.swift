@@ -26,6 +26,11 @@ struct SummaryView: View {
                 Text(error).foregroundStyle(.red).font(.caption)
                 Button("Retry") { model.generate() }
             }
+            // Save failures get their own slot — pairing them with the generation
+            // error's Retry button would offer to regenerate the summary instead.
+            if let saveError = model.saveError {
+                Text(saveError).foregroundStyle(.red).font(.caption)
+            }
             ScrollView {
                 Text(renderedSummary)
                     .textSelection(.enabled)
@@ -57,6 +62,7 @@ final class SummaryModel: ObservableObject {
     @Published var summaryText = ""
     @Published var streaming = false
     @Published var error: String?
+    @Published var saveError: String?
 
     private let record: SessionRecord
     private let sessionManager: SessionManager
@@ -117,6 +123,11 @@ final class SummaryModel: ObservableObject {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "meeting-summary.md"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        try? exportMarkdown.write(to: url, atomically: true, encoding: .utf8)
+        do {
+            try exportMarkdown.write(to: url, atomically: true, encoding: .utf8)
+            saveError = nil
+        } catch {
+            saveError = "Could not save: \(error.localizedDescription)"
+        }
     }
 }

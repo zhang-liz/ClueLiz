@@ -3,7 +3,7 @@ import SwiftUI
 import CluelessCore
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private(set) var appState: AppState!
     private var overlayPanel: OverlayPanel?
     private var settingsWindow: NSWindow?
@@ -127,6 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.title = "Meeting Summary"
         window.contentView = NSHostingView(rootView: SummaryView(model: model))
         window.isReleasedWhenClosed = false
+        window.delegate = self   // release the retained window once it closes
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -162,6 +163,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func showOverlay() {
         overlayPanel?.orderFrontRegardless()
+    }
+
+    // Only summary windows set this delegate; the other windows are single,
+    // reused references that must stay retained.
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        summaryWindows.removeAll { $0 == window }
     }
 
     @objc func openSettings() {
