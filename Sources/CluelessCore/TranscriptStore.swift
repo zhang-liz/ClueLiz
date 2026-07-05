@@ -46,6 +46,15 @@ public final class TranscriptStore {
         onChange?()
     }
 
+    /// Wipes all turns — call between sessions so a new meeting starts clean.
+    public func clear() {
+        lock.lock()
+        _turns.removeAll()
+        openPartialIndex.removeAll()
+        lock.unlock()
+        onChange?()
+    }
+
     public func recentTurns(_ n: Int) -> [TranscriptTurn] {
         lock.lock(); defer { lock.unlock() }
         return Array(_turns.suffix(n))
@@ -59,7 +68,9 @@ public final class TranscriptStore {
         for turn in _turns.reversed() {
             let line = "\(turn.speaker.label): \(turn.text)"
             let words = line.split(separator: " ").count
-            if wordCount + words > maxWords { break }
+            // Always include the newest line, even if it alone exceeds the budget —
+            // an empty context is worse than a slightly oversized one.
+            if wordCount + words > maxWords, !lines.isEmpty { break }
             wordCount += words
             lines.append(line)
         }

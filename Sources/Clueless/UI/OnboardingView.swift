@@ -9,6 +9,8 @@ struct OnboardingView: View {
     let contextStore: FileContextStore
     var onFinished: () -> Void
 
+    private static let eventStore = EKEventStore()
+
     @State private var page = 0
     @State private var micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
     @State private var screenGranted = CGPreflightScreenCaptureAccess()
@@ -82,7 +84,8 @@ struct OnboardingView: View {
                     explanation: "Detects when meetings start and end.",
                     granted: calendarGranted
                 ) {
-                    EKEventStore().requestFullAccessToEvents { granted, _ in
+                    // Static: the store must outlive this call or the callback may never fire.
+                    Self.eventStore.requestFullAccessToEvents { granted, _ in
                         DispatchQueue.main.async { calendarGranted = granted }
                     }
                 }

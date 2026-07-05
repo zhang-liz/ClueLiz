@@ -48,6 +48,25 @@ import Testing
         #expect(ctx.contains("Them: four five six"))
     }
 
+    @Test func contextTextAlwaysIncludesNewestTurn() {
+        let s = TranscriptStore()
+        s.applyFinal(speaker: .me, text: "one two three four five six seven eight")
+        // Budget smaller than the only turn — still return it rather than nothing.
+        #expect(s.contextText(maxWords: 3).contains("one two three"))
+    }
+
+    @Test func clearResetsTurnsAndPartials() {
+        let s = TranscriptStore()
+        s.applyPartial(speaker: .me, text: "partial")
+        s.applyFinal(speaker: .them(0), text: "final")
+        s.clear()
+        #expect(s.turns.isEmpty)
+        // A partial after clear() must open a fresh turn, not index into the old array.
+        s.applyPartial(speaker: .me, text: "new partial")
+        #expect(s.turns.count == 1)
+        #expect(s.turns[0].text == "new partial")
+    }
+
     @Test func speakerLabels() {
         #expect(Speaker.me.label == "Me")
         #expect(Speaker.them(0).label == "Them")

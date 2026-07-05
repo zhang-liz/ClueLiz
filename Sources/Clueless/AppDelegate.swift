@@ -105,6 +105,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.contentView = NSHostingView(rootView: OnboardingView(contextStore: appState.contextStore) { [weak self] in
             UserDefaults.standard.set(true, forKey: "onboardingDone")
             self?.onboardingWindow?.close()
+            // Deferred from AppState.init so the permission dialog doesn't
+            // preempt the onboarding walkthrough.
+            self?.appState.sessionManager.startCalendarWatch()
         })
         window.isReleasedWhenClosed = false
         window.center()

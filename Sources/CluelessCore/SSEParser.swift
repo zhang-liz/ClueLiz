@@ -18,7 +18,8 @@ public struct SSEParser {
 
         for line in lines {
             guard line.hasPrefix("data:") else { continue }
-            let payload = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+            // Trim newlines too: CRLF streams leave a trailing "\r" on every line.
+            let payload = String(line.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !payload.isEmpty, payload != "[DONE]" else { continue }
             payloads.append(payload)
         }
