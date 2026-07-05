@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import AVFoundation
 import EventKit
 import CoreGraphics
@@ -15,6 +16,10 @@ struct OnboardingView: View {
     @State private var micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
     @State private var screenGranted = CGPreflightScreenCaptureAccess()
     @State private var calendarGranted = EKEventStore.authorizationStatus(for: .event) == .fullAccess
+
+    // Granting in System Settings gives no callback — poll so the "Granted"
+    // badges update while the user flips permissions in another window.
+    private let permissionPoll = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(spacing: 16) {
@@ -34,6 +39,11 @@ struct OnboardingView: View {
         }
         .padding(24)
         .frame(width: 480, height: 420)
+        .onReceive(permissionPoll) { _ in
+            micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+            screenGranted = CGPreflightScreenCaptureAccess()
+            calendarGranted = EKEventStore.authorizationStatus(for: .event) == .fullAccess
+        }
     }
 
     @ViewBuilder private var content: some View {

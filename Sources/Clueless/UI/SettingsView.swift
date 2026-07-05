@@ -85,16 +85,19 @@ struct SettingsView: View {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
+        // Everything FileImporter supports: pdf, docx, txt, md/markdown.
         panel.allowedContentTypes = [.pdf, .plainText, .init(filenameExtension: "docx")!,
-                                     .init(filenameExtension: "md")!]
+                                     .init(filenameExtension: "md")!,
+                                     .init(filenameExtension: "markdown")!]
         guard panel.runModal() == .OK else { return }
-        importError = nil
+        var failures: [String] = []
         for url in panel.urls {
             do {
                 try contextStore.importFile(at: url)
             } catch {
-                importError = error.localizedDescription
+                failures.append(error.localizedDescription)
             }
         }
+        importError = failures.isEmpty ? nil : failures.joined(separator: "\n")
     }
 }
