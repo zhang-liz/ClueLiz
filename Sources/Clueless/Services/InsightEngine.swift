@@ -67,30 +67,31 @@ final class InsightEngine {
         currentTask = Task { [weak self] in
             guard self != nil else { return }
             do {
-                try await Self.withTimeout(timeout) {
-                    for try await delta in provider.stream(request) {
-                        if Task.isCancelled { return }
-                        await MainActor.run { onDelta(delta) }
+                let activity = StreamActivity()
+                try await withThrowingTaskGroup(of: Void.self) { group in
+                    group.addTask {
+                        for try await delta in provider.stream(request) {
+                            if Task.isCancelled { return }
+                            activity.touch()
+                            await MainActor.run { onDelta(delta) }
+                        }
                     }
+                    // Idle watchdog: a healthy stream keeps producing deltas, and a
+                    // long answer may legitimately take longer than `timeout` overall.
+                    // Only give up when NOTHING has arrived for `timeout` seconds.
+                    group.addTask {
+                        while activity.idleSeconds < timeout {
+                            try await Task.sleep(nanoseconds: 500_000_000)
+                        }
+                        throw LLMError.timeout(seconds: Int(timeout))
+                    }
+                    try await group.next()
+                    group.cancelAll()
                 }
                 if !Task.isCancelled { onDone(nil) }
             } catch {
                 if !Task.isCancelled { onDone(error) }
             }
-        }
-    }
-
-    /// Races `operation` against a wall-clock timeout.
-    private static func withTimeout(_ seconds: TimeInterval,
-                                    operation: @escaping () async throws -> Void) async throws {
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask { try await operation() }
-            group.addTask {
-                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-                throw LLMError.http(status: 408, body: "Request timed out after \(Int(seconds))s")
-            }
-            try await group.next()
-            group.cancelAll()
         }
     }
 
@@ -124,7 +125,16 @@ final class InsightEngine {
         definitionWorker = Task { [weak self] in
             while let self, !Task.isCancelled, !self.definitionQueue.isEmpty {
                 let term = self.definitionQueue.removeFirst()
-                guard let provider = self.liveLLM() else { break }
+                guard let provider = self.liveLLM() else {
+                    // No key yet — drop the queue and un-mark the terms so they can
+                    // be defined on a later mention once a key is added.
+                    self.definedTerms.remove(term.lowercased())
+                    for queued in self.definitionQueue {
+                        self.definedTerms.remove(queued.lowercased())
+                    }
+                    self.definitionQueue.removeAll()
+                    break
+                }
                 var context = self.contextProvider()
                 context.transcript = self.store.contextText(maxWords: 200)   // short slice — fast request
                 let request = PromptBuilder.definitionRequest(term: term, context: context)
@@ -150,9 +160,11 @@ final class InsightEngine {
 
     func startChipLoop(onChips: @escaping ([Chip]) -> Void) {
         stopChipLoop()
+        definedTerms.removeAll()   // "this session" — a new session starts fresh
         chipLoopTask = Task { [weak self] in
             guard let self else { return }
             var knownChips: [Chip] = []
+            var publishedChips: [Chip] = []
             var processedFinalCount = 0
             var finalsSinceExtraction = 0
             var lastExtraction = Date.distantPast
@@ -199,8 +211,11 @@ final class InsightEngine {
                     }
                 }
 
-                let chips = knownChips
-                await MainActor.run { onChips(chips) }
+                if knownChips != publishedChips {
+                    publishedChips = knownChips
+                    let chips = knownChips
+                    await MainActor.run { onChips(chips) }
+                }
             }
         }
     }
@@ -228,5 +243,22 @@ final class InsightEngine {
         }
         if result.count > 8 { result.removeFirst(result.count - 8) }
         return result
+    }
+}
+
+/// Last-delta timestamp shared between a stream loop and its idle watchdog.
+private final class StreamActivity: @unchecked Sendable {
+    private let lock = NSLock()
+    private var last = Date()
+
+    func touch() {
+        lock.lock()
+        last = Date()
+        lock.unlock()
+    }
+
+    var idleSeconds: TimeInterval {
+        lock.lock(); defer { lock.unlock() }
+        return Date().timeIntervalSince(last)
     }
 }

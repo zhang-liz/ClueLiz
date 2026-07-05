@@ -12,11 +12,13 @@ final class DeepgramStreamClient: NSObject {
 
     private var task: URLSessionWebSocketTask?
     private lazy var session = URLSession(configuration: .default)
-    private var keepaliveTimer: Timer?
+    private var keepaliveTimer: DispatchSourceTimer?
     private var lastSend = Date.distantPast
 
     private var finished = false
     private var reconnectAttempt = 0
+    /// Send and receive can fail for the same drop — only schedule one reconnect.
+    private var reconnectScheduled = false
 
     // Ring buffer of PCM chunks while disconnected: 30 s at 16 kHz * 2 bytes ≈ 960 KB.
     private var pendingPCM: [Data] = []
@@ -58,7 +60,6 @@ final class DeepgramStreamClient: NSObject {
         pendingPCM.removeAll()
         pendingBytes = 0
 
-        reconnectAttempt = 0
         onStateChange?(true)
         startKeepalive()
     }
@@ -68,6 +69,8 @@ final class DeepgramStreamClient: NSObject {
             guard let self else { return }
             switch result {
             case .success(let message):
+                // A received message proves the connection works — reset the backoff.
+                self.queue.async { self.reconnectAttempt = 0 }
                 if case .string(let text) = message,
                    let parsed = DeepgramMessageParser.parse(Data(text.utf8)) {
                     self.onResult?(parsed)
@@ -80,7 +83,8 @@ final class DeepgramStreamClient: NSObject {
     }
 
     private func handleDisconnect() {
-        guard !finished else { return }
+        guard !finished, !reconnectScheduled else { return }
+        reconnectScheduled = true
         onStateChange?(false)
         stopKeepalive()
         task?.cancel()
@@ -88,7 +92,9 @@ final class DeepgramStreamClient: NSObject {
         let delay = min(pow(2.0, Double(reconnectAttempt)), 30.0)
         reconnectAttempt += 1
         queue.asyncAfter(deadline: .now() + delay) { [weak self] in
-            self?.openSocket()
+            guard let self else { return }
+            self.reconnectScheduled = false
+            self.openSocket()
         }
     }
 
@@ -123,23 +129,24 @@ final class DeepgramStreamClient: NSObject {
         }
     }
 
+    // Keepalive runs on `queue` (like every other access to `task`/`lastSend`),
+    // so there is no cross-thread state sharing. Both methods are called on `queue`.
     private func startKeepalive() {
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.keepaliveTimer?.invalidate()
-            self.keepaliveTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-                guard let self, let task = self.task, task.state == .running else { return }
-                if Date().timeIntervalSince(self.lastSend) >= 5 {
-                    task.send(.string(#"{"type":"KeepAlive"}"#)) { _ in }
-                }
+        stopKeepalive()
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + 5, repeating: 5)
+        timer.setEventHandler { [weak self] in
+            guard let self, let task = self.task, task.state == .running else { return }
+            if Date().timeIntervalSince(self.lastSend) >= 5 {
+                task.send(.string(#"{"type":"KeepAlive"}"#)) { _ in }
             }
         }
+        timer.resume()
+        keepaliveTimer = timer
     }
 
     private func stopKeepalive() {
-        DispatchQueue.main.async { [weak self] in
-            self?.keepaliveTimer?.invalidate()
-            self?.keepaliveTimer = nil
-        }
+        keepaliveTimer?.cancel()
+        keepaliveTimer = nil
     }
 }

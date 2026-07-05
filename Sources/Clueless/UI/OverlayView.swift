@@ -152,6 +152,14 @@ struct InsightsCardView: View {
 
     private let columns = [GridItem(.adaptive(minimum: 120), spacing: 6)]
 
+    /// Recap runs on the summary provider (Anthropic); everything else on Gemini.
+    private func missingKeyName(for action: InsightAction) -> String? {
+        if action == .recap {
+            return appState.hasAnthropicKey ? nil : "Anthropic"
+        }
+        return appState.hasGeminiKey ? nil : "Gemini"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             LazyVGrid(columns: columns, spacing: 6) {
@@ -166,8 +174,8 @@ struct InsightsCardView: View {
                     }
                     .buttonStyle(.bordered)
                     .tint(appState.activeAction == action ? .accentColor : .secondary)
-                    .disabled(!appState.hasGeminiKey && action != .recap)
-                    .help(appState.hasGeminiKey ? action.title : "Add your Gemini key in Settings")
+                    .disabled(missingKeyName(for: action) != nil)
+                    .help(missingKeyName(for: action).map { "Add your \($0) key in Settings" } ?? action.title)
                 }
             }
             if appState.insightStreaming || !appState.insightText.isEmpty {

@@ -89,7 +89,11 @@ final class SummaryModel: ObservableObject {
             error = "Add your Anthropic key in Settings to generate summaries."
             return
         }
-        let transcript = record.markdownExport()   // includes full transcript section
+        // Plain transcript only — markdownExport() would embed any existing summary
+        // and headers into the prompt.
+        let transcript = record.turns.filter(\.isFinal)
+            .map { "\($0.speaker.label): \($0.text)" }
+            .joined(separator: "\n")
         streaming = true
         summaryText = ""
         Task {
