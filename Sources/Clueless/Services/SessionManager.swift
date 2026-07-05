@@ -39,23 +39,11 @@ final class SessionManager {
     // MARK: - Lifecycle
 
     func start() {
-        var record = SessionRecord(startedAt: Date())
+        let record = SessionRecord(startedAt: Date())
         current = record
         recoverableSession = nil
         save(record)
-
-        flushTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
-            self?.flush()
-        }
-        silenceTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            guard let self, self.current != nil else { return }
-            if Date().timeIntervalSince(self.lastAudioActivity()) > self.silenceLimit {
-                self.silenceTimer?.invalidate()   // fire once; owner confirms or restarts
-                self.onSilenceTimeout?()
-            }
-        }
-        // keep a strong reference valid even if start() is called twice
-        record.turns = []
+        startTimers()
     }
 
     /// Marks a crash-recovered session as ended without resuming it.
@@ -69,8 +57,32 @@ final class SessionManager {
     func resume(_ session: SessionRecord) {
         current = session
         recoverableSession = nil
+        startTimers()
+    }
+
+    /// True once the current silence episode has been reported; re-arms when audio resumes.
+    private var silencePrompted = false
+
+    private func startTimers() {
+        flushTimer?.invalidate()
+        silenceTimer?.invalidate()
+        silencePrompted = false
+
         flushTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             self?.flush()
+        }
+        silenceTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            guard let self, self.current != nil else { return }
+            if Date().timeIntervalSince(self.lastAudioActivity()) > self.silenceLimit {
+                // Prompt once per silence episode; if the owner keeps the session
+                // going and audio resumes, a later silence prompts again.
+                if !self.silencePrompted {
+                    self.silencePrompted = true
+                    self.onSilenceTimeout?()
+                }
+            } else {
+                self.silencePrompted = false
+            }
         }
     }
 
@@ -87,6 +99,7 @@ final class SessionManager {
     func end() -> SessionRecord? {
         flushTimer?.invalidate()
         silenceTimer?.invalidate()
+        detectedEventID = nil   // don't let a stale calendar event end the next session
         guard var record = current else { return nil }
         record.turns = turnsProvider()
         record.endedAt = Date()
@@ -155,7 +168,11 @@ final class SessionManager {
 
     // MARK: - Calendar detection
 
+    private var calendarWatchStarted = false
+
     func startCalendarWatch() {
+        guard !calendarWatchStarted else { return }
+        calendarWatchStarted = true
         eventStore.requestFullAccessToEvents { [weak self] granted, _ in
             guard let self, granted else { return }
             self.calendarAccess = true

@@ -70,7 +70,8 @@ final class TranscriptionService {
         do { try micTap.start() } catch { startErrors.append(error) }
         do { try await systemTap.start() } catch { startErrors.append(error) }
         if startErrors.count == 2 {
-            throw startErrors[0]   // nothing captures — surface it
+            stop()                 // nothing captures — close the sockets, then surface it
+            throw startErrors[0]
         }
     }
 

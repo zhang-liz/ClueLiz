@@ -68,6 +68,10 @@ struct OverlayView: View {
                 appState.sessionActive ? appState.endSession() : appState.startSession()
             }
             .tint(appState.sessionActive ? .red : .green)
+            .help(appState.sessionActive
+                  ? "End the session and generate the summary"
+                  : (appState.hasDeepgramKey ? "Start transcribing this meeting"
+                                             : "Add your Deepgram key in Settings first"))
         }
     }
 
@@ -75,8 +79,9 @@ struct OverlayView: View {
         HStack {
             Text(message).font(.caption).foregroundStyle(.red)
             Spacer()
-            if let action = appState.activeAction {
-                Button("Retry") { appState.run(action: action) }
+            // Retries whatever failed — action, chip, chat question, or screen answer.
+            if appState.canRetry {
+                Button("Retry") { appState.retryLast() }
                     .font(.caption)
             }
             Button("✕") { appState.errorBanner = nil }
@@ -95,6 +100,14 @@ struct TranscriptPanelView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 4) {
+                    if appState.turns.isEmpty {
+                        Text(appState.sessionActive
+                             ? "Listening — speech appears here as it is transcribed."
+                             : "Press Start Session to begin transcribing your meeting.")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                     ForEach(appState.turns) { turn in
                         (Text("\(turn.speaker.label): ").bold() + Text(turn.text))
                             .font(.callout)
@@ -152,6 +165,14 @@ struct InsightsCardView: View {
 
     private let columns = [GridItem(.adaptive(minimum: 120), spacing: 6)]
 
+    /// Recap runs on the summary provider (Anthropic); everything else on Gemini.
+    private func missingKeyName(for action: InsightAction) -> String? {
+        if action == .recap {
+            return appState.hasAnthropicKey ? nil : "Anthropic"
+        }
+        return appState.hasGeminiKey ? nil : "Gemini"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             LazyVGrid(columns: columns, spacing: 6) {
@@ -166,22 +187,44 @@ struct InsightsCardView: View {
                     }
                     .buttonStyle(.bordered)
                     .tint(appState.activeAction == action ? .accentColor : .secondary)
-                    .disabled(!appState.hasGeminiKey && action != .recap)
-                    .help(appState.hasGeminiKey ? action.title : "Add your Gemini key in Settings")
+                    .disabled(missingKeyName(for: action) != nil)
+                    .help(missingKeyName(for: action).map { "Add your \($0) key in Settings" } ?? action.title)
                 }
             }
             if appState.insightStreaming || !appState.insightText.isEmpty {
-                ScrollView {
-                    HStack(alignment: .top, spacing: 6) {
-                        if appState.insightStreaming {
-                            ProgressView().controlSize(.small)
+                ZStack(alignment: .topTrailing) {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            HStack(alignment: .top, spacing: 6) {
+                                if appState.insightStreaming {
+                                    ProgressView().controlSize(.small)
+                                }
+                                Text(appState.insightText.isEmpty ? "…" : appState.insightText)
+                                    .font(.callout)
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .padding(6)
+                            .id("insight-answer")
                         }
-                        Text(appState.insightText.isEmpty ? "…" : appState.insightText)
-                            .font(.callout)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        // Follow the stream once it grows past the visible area.
+                        .onChange(of: appState.insightText) {
+                            if appState.insightStreaming {
+                                proxy.scrollTo("insight-answer", anchor: .bottom)
+                            }
+                        }
                     }
-                    .padding(6)
+                    if appState.insightStreaming {
+                        Button {
+                            appState.cancelStreaming()
+                        } label: {
+                            Label("Stop", systemImage: "stop.fill").font(.caption2)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                        .padding(4)
+                        .help("Stop generating — keeps the partial answer")
+                    }
                 }
                 .frame(maxHeight: 180)
                 .background(.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
@@ -247,7 +290,7 @@ struct ChatBarView: View {
                 Image(systemName: "paperplane.fill")
             }
             .keyboardShortcut(.return, modifiers: .command)
-            .disabled(appState.chatInput.isEmpty)
+            .disabled(appState.chatInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
     }
 }

@@ -26,4 +26,10 @@ import Foundation
         let out = p.feed(Data("data: 1\n\ndata: 2\n\n".utf8))
         #expect(out == ["1", "2"])
     }
+
+    @Test func handlesCRLFLineEndings() {
+        var p = SSEParser()
+        let out = p.feed(Data("data: {\"a\":1}\r\ndata: [DONE]\r\n\r\n".utf8))
+        #expect(out == ["{\"a\":1}"])
+    }
 }

@@ -21,6 +21,7 @@ public struct LLMRequest {
 public enum LLMError: Error, LocalizedError {
     case http(status: Int, body: String)
     case missingKey
+    case timeout(seconds: Int)
 
     public var errorDescription: String? {
         switch self {
@@ -28,6 +29,8 @@ public enum LLMError: Error, LocalizedError {
             return "LLM request failed (HTTP \(status)): \(body.prefix(200))"
         case .missingKey:
             return "API key missing — add it in Settings."
+        case .timeout(let seconds):
+            return "No response from the AI for \(seconds)s — request cancelled."
         }
     }
 }

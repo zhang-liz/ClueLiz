@@ -64,7 +64,11 @@ final class AppState: ObservableObject {
             DispatchQueue.main.async { self.turns = turns }
         }
         sessionManager.turnsProvider = { [weak self] in self?.store.turns ?? [] }
-        sessionManager.startCalendarWatch()
+        // Don't trigger the calendar permission dialog before onboarding has
+        // explained it — AppDelegate starts the watch when onboarding finishes.
+        if UserDefaults.standard.bool(forKey: "onboardingDone") {
+            sessionManager.startCalendarWatch()
+        }
     }
 
     /// Crash recovery: seed the transcript with a recovered session's turns and continue it.
@@ -85,6 +89,13 @@ final class AppState: ObservableObject {
 
     func startSession() {
         guard !sessionActive else { return }
+        // A new meeting starts clean — otherwise the previous session's transcript
+        // leaks into this session's record and every LLM prompt.
+        store.clear()
+        chips = []
+        definitions = []
+        insightText = ""
+        activeAction = nil
         sessionManager.start()
         startCapture()
     }
@@ -113,6 +124,8 @@ final class AppState: ObservableObject {
                 self.errorBanner = "Could not start capture: \(error.localizedDescription)"
                 self.sessionActive = false
                 self.transcription = nil
+                self.insightEngine.stopChipLoop()
+                _ = self.sessionManager.end()   // stop flushing a session that never captured
             }
         }
         insightEngine.startChipLoop { [weak self] chips in
@@ -136,9 +149,10 @@ final class AppState: ObservableObject {
         transcription?.stop()
         transcription = nil
         insightEngine.stopChipLoop()
-        insightEngine.cancelCurrent()
+        cancelStreaming()   // cancellation suppresses onDone — clear the spinner here
         sessionActive = false
         reconnecting = false
+        participants = []   // belong to the meeting that just ended
         if let record = sessionManager.end(), !record.turns.filter(\.isFinal).isEmpty {
             presentSummary?(record)
         }
@@ -146,8 +160,24 @@ final class AppState: ObservableObject {
 
     // MARK: - Insights
 
+    /// Re-runs whatever produced the current answer — set by every run* entry point
+    /// so the error banner's Retry works for actions, chips, chat, and screen answers.
+    private var lastRun: (() -> Void)?
+    var canRetry: Bool { lastRun != nil }
+
+    func retryLast() {
+        lastRun?()
+    }
+
+    /// User-visible stop: abandons the in-flight stream, keeps the partial answer.
+    func cancelStreaming() {
+        insightEngine.cancelCurrent()
+        insightStreaming = false
+    }
+
     func run(action: InsightAction) {
         activeAction = action
+        lastRun = { [weak self] in self?.run(action: action) }
         beginStreaming()
         insightEngine.run(action: action,
                           onDelta: { [weak self] delta in self?.insightText += delta },
@@ -156,6 +186,7 @@ final class AppState: ObservableObject {
 
     func runChip(_ chip: Chip) {
         activeAction = nil
+        lastRun = { [weak self] in self?.runChip(chip) }
         beginStreaming()
         let question: String
         switch chip.kind {
@@ -172,7 +203,13 @@ final class AppState: ObservableObject {
         let question = chatInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !question.isEmpty else { return }
         chatInput = ""
+        sendChat(question: question)
+    }
+
+    /// Question passed explicitly so Retry can re-send it after the input was cleared.
+    private func sendChat(question: String) {
         activeAction = nil
+        lastRun = { [weak self] in self?.sendChat(question: question) }
         beginStreaming()
         insightEngine.runFreeform(question: question, smartMode: smartMode,
                                   onDelta: { [weak self] delta in self?.insightText += delta },
@@ -181,8 +218,11 @@ final class AppState: ObservableObject {
 
     func runScreenAnswer() {
         activeAction = nil
+        lastRun = { [weak self] in self?.runScreenAnswer() }
+        // Stop any in-flight stream now — the screenshot takes a moment, and stale
+        // deltas would otherwise land in the freshly cleared answer area.
+        insightEngine.cancelCurrent()
         beginStreaming()
-        insightText = ""
         Task {
             do {
                 let png = try await ScreenSnapshotService.captureMainDisplayPNG()
