@@ -271,15 +271,16 @@ struct ChipsRowView: View {
     }
 }
 
-/// Free-text AI input with Smart Mode toggle. Cmd+Enter submits.
+/// Free-text AI input with Smart Mode toggle. Return and ⌘⏎ both send —
+/// single-line field, so no multiline axis that a plain-Return send would
+/// make unreachable anyway.
 struct ChatBarView: View {
     @EnvironmentObject var appState: AppState
 
     var body: some View {
         HStack(spacing: 6) {
-            TextField("Ask anything… (⌘⏎)", text: $appState.chatInput, axis: .vertical)
+            TextField("Ask anything… (⏎ or ⌘⏎ to send)", text: $appState.chatInput)
                 .textFieldStyle(.roundedBorder)
-                .lineLimit(1...3)
                 .onSubmit { appState.sendChat() }
             Toggle("Smart", isOn: $appState.smartMode)
                 .toggleStyle(.button)

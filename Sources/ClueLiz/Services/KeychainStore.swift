@@ -17,6 +17,12 @@ enum KeychainError: Error {
     case unexpectedStatus(OSStatus)
 }
 
+extension Notification.Name {
+    /// Posted after an API key is saved or deleted — lets AppState re-read key
+    /// availability so disabled buttons enable without a restart.
+    static let apiKeysChanged = Notification.Name("com.clueliz.apiKeysChanged")
+}
+
 /// Generic-password Keychain storage for the three API keys.
 enum KeychainStore {
     private static let service = "com.clueliz.app"
@@ -42,6 +48,7 @@ enum KeychainStore {
         } else if updateStatus != errSecSuccess {
             throw KeychainError.unexpectedStatus(updateStatus)
         }
+        NotificationCenter.default.post(name: .apiKeysChanged, object: nil)
     }
 
     static func get(_ key: APIKeyName) -> String? {
@@ -60,5 +67,6 @@ enum KeychainStore {
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.unexpectedStatus(status)
         }
+        NotificationCenter.default.post(name: .apiKeysChanged, object: nil)
     }
 }

@@ -51,7 +51,7 @@ struct SettingsView: View {
 
             Section("Hotkeys") {
                 LabeledContent("Get Answer (screen)", value: "⌘⇧Return")
-                LabeledContent("Chat submit", value: "⌘Return")
+                LabeledContent("Chat submit", value: "Return or ⌘Return")
             }
         }
         .formStyle(.grouped)

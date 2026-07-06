@@ -12,9 +12,13 @@ final class HotkeyManager {
     static let defaultKeyCode = UInt32(kVK_Return)
     static let defaultModifiers = UInt32(cmdKey | shiftKey)
 
+    /// Returns false when registration fails (e.g. the shortcut is already taken
+    /// by another app) so the caller can warn instead of leaving the hotkey
+    /// silently dead.
+    @discardableResult
     func register(keyCode: UInt32 = HotkeyManager.defaultKeyCode,
                   modifiers: UInt32 = HotkeyManager.defaultModifiers,
-                  handler: @escaping () -> Void) {
+                  handler: @escaping () -> Void) -> Bool {
         unregister()
         self.handler = handler
 
@@ -22,7 +26,7 @@ final class HotkeyManager {
                                       eventKind: UInt32(kEventHotKeyPressed))
         let selfPointer = Unmanaged.passUnretained(self).toOpaque()
 
-        InstallEventHandler(GetApplicationEventTarget(), { _, _, userData in
+        let installStatus = InstallEventHandler(GetApplicationEventTarget(), { _, _, userData in
             guard let userData else { return noErr }
             let manager = Unmanaged<HotkeyManager>.fromOpaque(userData).takeUnretainedValue()
             DispatchQueue.main.async { manager.handler?() }
@@ -30,8 +34,13 @@ final class HotkeyManager {
         }, 1, &eventType, selfPointer, &eventHandlerRef)
 
         let hotKeyID = EventHotKeyID(signature: OSType(0x434C554C) /* "CLUL" */, id: 1)
-        RegisterEventHotKey(keyCode, modifiers, hotKeyID,
-                            GetApplicationEventTarget(), 0, &hotKeyRef)
+        let registerStatus = RegisterEventHotKey(keyCode, modifiers, hotKeyID,
+                                                 GetApplicationEventTarget(), 0, &hotKeyRef)
+        guard installStatus == noErr, registerStatus == noErr, hotKeyRef != nil else {
+            unregister()
+            return false
+        }
+        return true
     }
 
     func unregister() {

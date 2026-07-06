@@ -60,10 +60,24 @@ final class AppState: ObservableObject {
     init() {
         store.onChange = { [weak self] in
             guard let self else { return }
-            let turns = self.store.turns
-            DispatchQueue.main.async { self.turns = turns }
+            // Snapshot on the main queue: onChange fires on both Deepgram callback
+            // queues, and snapshots taken there can enqueue out of order,
+            // transiently publishing older turns over newer ones.
+            DispatchQueue.main.async { self.turns = self.store.turns }
         }
         sessionManager.turnsProvider = { [weak self] in self?.store.turns ?? [] }
+        // Keychain edits (Settings, onboarding) and window focus re-check key
+        // availability so action buttons enable without an app restart.
+        NotificationCenter.default.addObserver(
+            forName: .apiKeysChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshKeyAvailability() }
+        }
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshKeyAvailability() }
+        }
         // Don't trigger the calendar permission dialog before onboarding has
         // explained it — AppDelegate starts the watch when onboarding finishes.
         if UserDefaults.standard.bool(forKey: "onboardingDone") {
@@ -81,35 +95,64 @@ final class AppState: ObservableObject {
         startCapture()
     }
 
-    var hasDeepgramKey: Bool { KeychainStore.get(.deepgram)?.isEmpty == false }
-    var hasGeminiKey: Bool { KeychainStore.get(.gemini)?.isEmpty == false }
-    var hasAnthropicKey: Bool { KeychainStore.get(.anthropic)?.isEmpty == false }
+    // Published so buttons disabled on a missing key re-enable the moment a key
+    // is added in Settings — computed properties would only re-evaluate when an
+    // unrelated @Published property fired.
+    @Published private(set) var hasDeepgramKey = KeychainStore.get(.deepgram)?.isEmpty == false
+    @Published private(set) var hasGeminiKey = KeychainStore.get(.gemini)?.isEmpty == false
+    @Published private(set) var hasAnthropicKey = KeychainStore.get(.anthropic)?.isEmpty == false
+
+    /// Re-reads key availability from the Keychain (only assigns on change to
+    /// avoid needless view invalidation).
+    func refreshKeyAvailability() {
+        let deepgram = KeychainStore.get(.deepgram)?.isEmpty == false
+        let gemini = KeychainStore.get(.gemini)?.isEmpty == false
+        let anthropic = KeychainStore.get(.anthropic)?.isEmpty == false
+        if hasDeepgramKey != deepgram { hasDeepgramKey = deepgram }
+        if hasGeminiKey != gemini { hasGeminiKey = gemini }
+        if hasAnthropicKey != anthropic { hasAnthropicKey = anthropic }
+    }
 
     // MARK: - Session
 
     func startSession() {
         guard !sessionActive else { return }
+        // Verify the key BEFORE creating the session record — otherwise every
+        // failed start writes a junk empty session JSON to disk.
+        refreshKeyAvailability()
+        guard hasDeepgramKey else {
+            showNonRetryableError("Add your Deepgram key in Settings first.")
+            return
+        }
         // A new meeting starts clean — otherwise the previous session's transcript
         // leaks into this session's record and every LLM prompt.
         store.clear()
         chips = []
         definitions = []
+        evictedDefinitionIDs = []
         insightText = ""
         activeAction = nil
         sessionManager.start()
         startCapture()
     }
 
+    /// Definitions evicted from the (max 5) list — later stream deltas for them
+    /// are dropped so they can't re-insert and evict newer entries in a cycle.
+    private var evictedDefinitionIDs: Set<String> = []
+
     /// Shared by fresh start and crash-resume: capture + chip loop, no new record.
     private func startCapture() {
         guard let key = KeychainStore.get(.deepgram), !key.isEmpty else {
-            errorBanner = "Add your Deepgram key in Settings first."
+            showNonRetryableError("Add your Deepgram key in Settings first.")
             _ = sessionManager.end()
             return
         }
         let service = TranscriptionService(store: store)
         service.onReconnecting = { [weak self] down in
             DispatchQueue.main.async { self?.reconnecting = down }
+        }
+        service.onStreamError = { [weak self] message in
+            DispatchQueue.main.async { self?.showNonRetryableError(message) }
         }
         sessionManager.lastAudioActivity = { [weak service] in
             service?.lastAudioActivity ?? Date()
@@ -121,11 +164,8 @@ final class AppState: ObservableObject {
             do {
                 try await service.start(deepgramKey: key)
             } catch {
-                self.errorBanner = "Could not start capture: \(error.localizedDescription)"
-                self.sessionActive = false
-                self.transcription = nil
-                self.insightEngine.stopChipLoop()
-                _ = self.sessionManager.end()   // stop flushing a session that never captured
+                self.showNonRetryableError("Could not start capture: \(error.localizedDescription)")
+                _ = self.closeSession()   // stop flushing a session that never captured
             }
         }
         insightEngine.startChipLoop { [weak self] chips in
@@ -134,6 +174,7 @@ final class AppState: ObservableObject {
         insightEngine.startAutoDefine { [weak self] term, definition, done in
             guard let self else { return }
             let id = term.lowercased()
+            guard !self.evictedDefinitionIDs.contains(id) else { return }
             if let index = self.definitions.firstIndex(where: { $0.id == id }) {
                 self.definitions[index].text = definition
                 self.definitions[index].done = done
@@ -141,11 +182,27 @@ final class AppState: ObservableObject {
                 self.definitions.insert(
                     TermDefinition(id: id, term: term, text: definition, done: done), at: 0)
             }
-            if self.definitions.count > 5 { self.definitions.removeLast() }
+            if self.definitions.count > 5 {
+                self.evictedDefinitionIDs.insert(self.definitions.removeLast().id)
+            }
         }
     }
 
     func endSession() {
+        if let record = closeSession(), !record.turns.filter(\.isFinal).isEmpty {
+            presentSummary?(record)
+        }
+    }
+
+    /// App-termination path (⌘Q mid-session): flush the transcript and mark the
+    /// session ended so the next launch doesn't claim an unclean shutdown — but
+    /// skip the summary window, since the app is quitting.
+    func endSessionForTermination() {
+        _ = closeSession()
+    }
+
+    /// Tears down capture and closes the session record; returns it for summary.
+    private func closeSession() -> SessionRecord? {
         transcription?.stop()
         transcription = nil
         insightEngine.stopChipLoop()
@@ -153,9 +210,7 @@ final class AppState: ObservableObject {
         sessionActive = false
         reconnecting = false
         participants = []   // belong to the meeting that just ended
-        if let record = sessionManager.end(), !record.turns.filter(\.isFinal).isEmpty {
-            presentSummary?(record)
-        }
+        return sessionManager.end()
     }
 
     // MARK: - Insights
@@ -167,6 +222,13 @@ final class AppState: ObservableObject {
 
     func retryLast() {
         lastRun?()
+    }
+
+    /// Banner for non-LLM failures (capture, keys, hotkeys). Clears `lastRun` so
+    /// the banner's Retry can't re-run an unrelated LLM action.
+    func showNonRetryableError(_ message: String) {
+        errorBanner = message
+        lastRun = nil
     }
 
     /// User-visible stop: abandons the in-flight stream, keeps the partial answer.

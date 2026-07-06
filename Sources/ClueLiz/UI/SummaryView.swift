@@ -42,17 +42,42 @@ struct SummaryView: View {
         .onAppear { model.generateIfNeeded() }
     }
 
+    // SwiftUI Text ignores Markdown block structure (and `.full` syntax would
+    // strip the ## and - markers without rendering them), so headings and
+    // bullets are styled by hand; inline markdown still parses per line.
     private var renderedSummary: AttributedString {
-        // Line-by-line Markdown so headers/bullets render; falls back to plain text.
-        let lines = model.summaryText.components(separatedBy: "\n").map { line -> AttributedString in
-            (try? AttributedString(markdown: line)) ?? AttributedString(line)
-        }
         var result = AttributedString()
-        for (index, line) in lines.enumerated() {
+        for (index, line) in model.summaryText.components(separatedBy: "\n").enumerated() {
             if index > 0 { result += AttributedString("\n") }
-            result += line
+            result += styled(line: line)
         }
         return result
+    }
+
+    private func styled(line: String) -> AttributedString {
+        switch MarkdownBlockLine.classify(line) {
+        case .heading(let level, let text):
+            var heading = inlineMarkdown(text)
+            switch level {
+            case 1: heading.font = .title2.bold()
+            case 2: heading.font = .title3.bold()
+            default: heading.font = .headline
+            }
+            return heading
+        case .bullet(let indent, let text):
+            var bullet = AttributedString(String(repeating: " ", count: indent) + "•  ")
+            bullet += inlineMarkdown(text)
+            return bullet
+        case .plain(let text):
+            return inlineMarkdown(text)
+        }
+    }
+
+    private func inlineMarkdown(_ text: String) -> AttributedString {
+        (try? AttributedString(
+            markdown: text,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+            ?? AttributedString(text)
     }
 }
 

@@ -101,6 +101,9 @@ final class InsightEngine {
     private var definedTerms = Set<String>()
     private var definitionQueue: [String] = []
     private var definitionWorker: Task<Void, Never>?
+    /// Bumped each time a worker is spawned — identifies the current worker so a
+    /// stale (cancelled) worker's tail can't clear the live one's reference.
+    private var definitionWorkerGeneration = 0
     private var onDefinition: ((_ term: String, _ definition: String, _ done: Bool) -> Void)?
 
     /// Streams a short definition for every newly mentioned acronym/keyword.
@@ -122,6 +125,12 @@ final class InsightEngine {
 
     private func drainDefinitionQueue() {
         guard definitionWorker == nil, !definitionQueue.isEmpty else { return }
+        // The worker's tail must only clear/re-drain if it is still the current
+        // worker (same generation, not cancelled): a cancelled worker's tail
+        // running after a replacement was spawned would nil the replacement's
+        // reference and start a concurrent third worker draining the same queue.
+        definitionWorkerGeneration += 1
+        let generation = definitionWorkerGeneration
         definitionWorker = Task { [weak self] in
             while let self, !Task.isCancelled, !self.definitionQueue.isEmpty {
                 let term = self.definitionQueue.removeFirst()
@@ -150,9 +159,11 @@ final class InsightEngine {
                     self.definedTerms.remove(term.lowercased())
                 }
             }
-            self?.definitionWorker = nil
+            guard let self, !Task.isCancelled,
+                  self.definitionWorkerGeneration == generation else { return }
+            self.definitionWorker = nil
             // New terms may have arrived while finishing the last one.
-            self?.drainDefinitionQueue()
+            self.drainDefinitionQueue()
         }
     }
 
