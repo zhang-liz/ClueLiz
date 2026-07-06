@@ -6,7 +6,7 @@ import ClueLizCore
 /// detection, silence timeout, and post-meeting summary generation.
 final class SessionManager {
     // Callbacks (delivered on the main queue)
-    var onMeetingDetected: ((_ title: String, _ attendees: [String]) -> Void)?
+    var onMeetingDetected: ((_ title: String, _ attendees: [String], _ eventID: String?) -> Void)?
     var onMeetingLikelyEnded: (() -> Void)?
     var onSilenceTimeout: (() -> Void)?
 
@@ -60,18 +60,35 @@ final class SessionManager {
         startTimers()
     }
 
+    /// Links the session the user just started to the calendar event they
+    /// accepted, enabling the "meeting ended" prompt. Never called for
+    /// declined prompts.
+    func attachDetectedEvent(_ eventID: String?) {
+        detectedEventID = eventID
+    }
+
     /// True once the current silence episode has been reported; re-arms when audio resumes.
     private var silencePrompted = false
+
+    /// Repeating timer in `.common` mode on the main run loop — keeps firing
+    /// during modal alerts (`NSAlert.runModal`) and overlay drag/resize, where
+    /// `.default`-mode timers stall.
+    private static func commonModeTimer(interval: TimeInterval,
+                                        block: @escaping (Timer) -> Void) -> Timer {
+        let timer = Timer(timeInterval: interval, repeats: true, block: block)
+        RunLoop.main.add(timer, forMode: .common)
+        return timer
+    }
 
     private func startTimers() {
         flushTimer?.invalidate()
         silenceTimer?.invalidate()
         silencePrompted = false
 
-        flushTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+        flushTimer = Self.commonModeTimer(interval: 10) { [weak self] _ in
             self?.flush()
         }
-        silenceTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+        silenceTimer = Self.commonModeTimer(interval: 30) { [weak self] _ in
             guard let self, self.current != nil else { return }
             if Date().timeIntervalSince(self.lastAudioActivity()) > self.silenceLimit {
                 // Prompt once per silence episode; if the owner keeps the session
@@ -147,23 +164,73 @@ final class SessionManager {
         }
     }
 
+    /// Lifecycle fields only — full records embed entire transcripts, far too
+    /// heavy to decode for every file at every launch.
+    private struct SessionStub: Codable {
+        let startedAt: Date
+        let endedAt: Date?
+    }
+
+    private struct SessionProbe {
+        let url: URL
+        let startedAt: Date
+        let endedAt: Date?
+    }
+
+    /// Stored session files beyond this are pruned at launch (oldest, cleanly
+    /// ended only) so the scan below stays bounded as meetings accumulate.
+    private static let maxStoredSessions = 50
+
     private func findRecoverableSession() {
         let files = (try? FileManager.default.contentsOfDirectory(
-            at: Self.sessionsDirectory, includingPropertiesForKeys: [.contentModificationDateKey]
+            at: Self.sessionsDirectory, includingPropertiesForKeys: nil
         )) ?? []
-        let newest = files
+        let decoder = JSONDecoder()
+        // Scan every file (only inspecting the newest would let a cleanly ended
+        // session mask an older crashed one), but decode just the stub fields.
+        var probes = files
             .filter { $0.pathExtension == "json" }
-            .sorted { (lhs, rhs) in
-                let l = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                let r = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                return l > r
+            .compactMap { url -> SessionProbe? in
+                guard let data = try? Data(contentsOf: url),
+                      let stub = try? decoder.decode(SessionStub.self, from: data) else { return nil }
+                return SessionProbe(url: url, startedAt: stub.startedAt, endedAt: stub.endedAt)
             }
-            .first
-        guard let newest,
-              let data = try? Data(contentsOf: newest),
-              let record = try? JSONDecoder().decode(SessionRecord.self, from: data),
-              record.endedAt == nil, !record.turns.isEmpty else { return }
-        recoverableSession = record
+
+        // Newest crashed session WITH turns wins; only crashed files get a full
+        // decode, newest first. A crash inside the first flush interval leaves a
+        // crashed file with no turns (start() saves an empty record immediately) —
+        // auto-close those instead of letting them mask an older recoverable
+        // session or accumulate forever as unprunable "crashed" files.
+        for index in probes.indices.sorted(by: { probes[$0].startedAt > probes[$1].startedAt })
+        where probes[index].endedAt == nil {
+            guard let data = try? Data(contentsOf: probes[index].url),
+                  var record = try? decoder.decode(SessionRecord.self, from: data) else { continue }
+            if record.turns.isEmpty {
+                record.endedAt = record.startedAt   // zero-length session, nothing to recover
+                save(record)
+                probes[index] = SessionProbe(url: probes[index].url,
+                                             startedAt: probes[index].startedAt,
+                                             endedAt: record.endedAt)
+                continue
+            }
+            recoverableSession = record
+            break
+        }
+
+        pruneEndedSessions(probes)
+    }
+
+    /// Deletes the oldest cleanly ended session files beyond `maxStoredSessions`.
+    /// Crashed sessions (endedAt == nil) are never pruned.
+    private func pruneEndedSessions(_ probes: [SessionProbe]) {
+        guard probes.count > Self.maxStoredSessions else { return }
+        let excess = probes
+            .sorted { $0.startedAt > $1.startedAt }
+            .dropFirst(Self.maxStoredSessions)
+            .filter { $0.endedAt != nil }
+        for probe in excess {
+            try? FileManager.default.removeItem(at: probe.url)
+        }
     }
 
     // MARK: - Calendar detection
@@ -177,7 +244,7 @@ final class SessionManager {
             guard let self, granted else { return }
             self.calendarAccess = true
             DispatchQueue.main.async {
-                self.calendarTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+                self.calendarTimer = Self.commonModeTimer(interval: 60) { [weak self] _ in
                     self?.checkCalendar()
                 }
                 self.checkCalendar()
@@ -210,10 +277,12 @@ final class SessionManager {
                     && !promptedEventIDs.contains($0.eventIdentifier ?? "")
             }) {
                 promptedEventIDs.insert(event.eventIdentifier ?? "")
-                detectedEventID = event.eventIdentifier
+                // detectedEventID is NOT set here — only if the user accepts the
+                // prompt (attachDetectedEvent). Otherwise a declined event would
+                // fire a bogus "meeting ended" prompt for a later manual session.
                 let attendees = (event.attendees ?? []).compactMap(\.name)
                 DispatchQueue.main.async {
-                    self.onMeetingDetected?(event.title ?? "Meeting", attendees)
+                    self.onMeetingDetected?(event.title ?? "Meeting", attendees, event.eventIdentifier)
                 }
             }
         } else if let eventID = detectedEventID,

@@ -23,12 +23,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
 
         // Get Answer: ⌘⇧Return, global, no typed input needed.
-        hotkeyManager.register { [weak self] in
+        let hotkeyRegistered = hotkeyManager.register { [weak self] in
             self?.appState.runScreenAnswer()
             self?.overlayPanel?.orderFrontRegardless()
         }
+        if !hotkeyRegistered {
+            appState.showNonRetryableError(
+                "Could not register the ⌘⇧⏎ hotkey — another app may already use it. Get Answer is unavailable.")
+        }
 
         wireSessionEvents()
+    }
+
+    /// ⌘Q mid-session: flush the transcript and mark the session ended —
+    /// otherwise up to 10 s of transcript is lost and the next launch falsely
+    /// claims an unclean shutdown.
+    func applicationWillTerminate(_ notification: Notification) {
+        appState?.endSessionForTermination()
     }
 
     private var summaryWindows: [NSWindow] = []
@@ -38,9 +49,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self?.showSummaryWindow(for: record)
         }
 
-        appState.sessionManager.onMeetingDetected = { [weak self] title, attendees in
+        appState.sessionManager.onMeetingDetected = { [weak self] title, attendees, eventID in
             guard let self, !self.appState.sessionActive else { return }
-            self.appState.participants = attendees
             let alert = NSAlert()
             alert.messageText = "Meeting starting: \(title)"
             alert.informativeText = attendees.isEmpty
@@ -50,6 +60,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             alert.addButton(withTitle: "Not Now")
             if alert.runModal() == .alertFirstButtonReturn {
                 self.appState.startSession()
+                // Participants and the calendar-event link belong only to a
+                // session actually started from this prompt — attaching them on
+                // "Not Now" (or a failed start) would pollute a later manual
+                // session and fire a bogus "meeting ended" prompt.
+                if self.appState.sessionActive {
+                    self.appState.participants = attendees
+                    self.appState.sessionManager.attachDetectedEvent(eventID)
+                }
             }
         }
 
@@ -103,17 +121,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         )
         window.title = "Welcome to ClueLiz"
         window.contentView = NSHostingView(rootView: OnboardingView(contextStore: appState.contextStore) { [weak self] in
-            UserDefaults.standard.set(true, forKey: "onboardingDone")
-            self?.onboardingWindow?.close()
-            // Deferred from AppState.init so the permission dialog doesn't
-            // preempt the onboarding walkthrough.
-            self?.appState.sessionManager.startCalendarWatch()
+            self?.finishOnboarding()
         })
         window.isReleasedWhenClosed = false
+        window.delegate = self   // title-bar close must release the window too
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         onboardingWindow = window
+    }
+
+    /// Done button: mark onboarding complete, start the calendar watch, release
+    /// the window (so its 1 s permission-poll timer dies with it). A premature
+    /// title-bar close deliberately does NOT come here — closing at page 0 must
+    /// not permanently mark onboarding done nor ambush the user with the
+    /// calendar permission dialog; see `windowWillClose`.
+    private func finishOnboarding() {
+        guard let window = onboardingWindow else { return }
+        onboardingWindow = nil   // windowWillClose then treats the close as handled
+        UserDefaults.standard.set(true, forKey: "onboardingDone")
+        // Deferred from AppState.init so the permission dialog doesn't
+        // preempt the onboarding walkthrough.
+        appState.sessionManager.startCalendarWatch()
+        window.close()
     }
 
     private func showSummaryWindow(for record: SessionRecord) {
@@ -165,10 +195,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         overlayPanel?.orderFrontRegardless()
     }
 
-    // Only summary windows set this delegate; the other windows are single,
-    // reused references that must stay retained.
+    // Summary windows and the onboarding window set this delegate; the other
+    // windows are single, reused references that must stay retained.
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
+        if window == onboardingWindow {
+            // Premature close (user bailed mid-walkthrough): release the window
+            // so its permission poll stops, but don't mark onboarding done — it
+            // re-shows next launch — and don't fire the calendar permission
+            // dialog with zero context. Done goes through finishOnboarding().
+            onboardingWindow = nil
+        }
         summaryWindows.removeAll { $0 == window }
     }
 
