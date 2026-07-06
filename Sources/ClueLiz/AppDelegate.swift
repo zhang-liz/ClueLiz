@@ -13,6 +13,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.setActivationPolicy(.regular)
         installMenu()
 
+        migrateLegacyDefaults()
+        EnvKeyFile.syncIntoKeychain()
+
         appState = AppState()
         let panel = OverlayPanel(appState: appState)
         panel.orderFrontRegardless()
@@ -129,6 +132,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         onboardingWindow = window
+    }
+
+    /// The rename from Clueless changed the bundle id, which reset UserDefaults.
+    /// Copy the settings that survive under the old domain so users aren't sent
+    /// through onboarding again.
+    private func migrateLegacyDefaults() {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: "onboardingDone") == nil,
+              let legacy = defaults.persistentDomain(forName: "com.clueless.app") else { return }
+        for key in ["onboardingDone", "meetingDomain"] {
+            if defaults.object(forKey: key) == nil, let value = legacy[key] {
+                defaults.set(value, forKey: key)
+            }
+        }
     }
 
     /// Done button: mark onboarding complete, start the calendar watch, release
