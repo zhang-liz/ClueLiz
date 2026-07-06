@@ -14,9 +14,11 @@ public enum Speaker: Equatable, Codable, Hashable {
 }
 
 /// One utterance in the transcript. Partial turns mutate in place until finalized.
+/// `speaker` is mutable: diarization may relabel an open partial's speaker
+/// between interim and final results.
 public struct TranscriptTurn: Identifiable, Equatable, Codable {
     public let id: UUID
-    public let speaker: Speaker
+    public var speaker: Speaker
     public var text: String
     public let timestamp: Date
     public var isFinal: Bool

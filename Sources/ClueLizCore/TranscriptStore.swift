@@ -1,12 +1,29 @@
 import Foundation
 
-/// Rolling transcript buffer. One mutable partial turn per speaker; finals commit in place.
+/// Rolling transcript buffer. One mutable partial turn per stream; finals commit in place.
 /// Thread-safe; `onChange` fires on the mutating thread after each change.
 public final class TranscriptStore {
+    /// The capture stream a speaker belongs to: `.me` is the mic, `.them(_)` the system tap.
+    private enum StreamKey: Hashable {
+        case mic
+        case system
+
+        init(_ speaker: Speaker) {
+            switch speaker {
+            case .me: self = .mic
+            case .them: self = .system
+            }
+        }
+    }
+
     private let lock = NSLock()
     private var _turns: [TranscriptTurn] = []
-    /// Index into `_turns` of the open (non-final) turn per speaker.
-    private var openPartialIndex: [Speaker: Int] = [:]
+    /// Index into `_turns` of the open (non-final) turn per stream. Keyed by
+    /// stream rather than speaker: diarization can relabel the system speaker
+    /// between interims and finals (e.g. `.them(0)` → `.them(1)`), and a
+    /// per-speaker key would leave the interim's partial open (and duplicated
+    /// in every LLM context) forever.
+    private var openPartialIndex: [StreamKey: Int] = [:]
 
     public var onChange: (() -> Void)?
 
@@ -21,11 +38,12 @@ public final class TranscriptStore {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         lock.lock()
-        if let index = openPartialIndex[speaker] {
+        if let index = openPartialIndex[StreamKey(speaker)] {
+            _turns[index].speaker = speaker   // adopt the latest diarization label
             _turns[index].text = trimmed
         } else {
             _turns.append(TranscriptTurn(speaker: speaker, text: trimmed, isFinal: false))
-            openPartialIndex[speaker] = _turns.count - 1
+            openPartialIndex[StreamKey(speaker)] = _turns.count - 1
         }
         lock.unlock()
         onChange?()
@@ -35,10 +53,11 @@ public final class TranscriptStore {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         lock.lock()
-        if let index = openPartialIndex[speaker] {
+        if let index = openPartialIndex[StreamKey(speaker)] {
+            _turns[index].speaker = speaker   // finals carry the authoritative label
             _turns[index].text = trimmed
             _turns[index].isFinal = true
-            openPartialIndex[speaker] = nil
+            openPartialIndex[StreamKey(speaker)] = nil
         } else {
             _turns.append(TranscriptTurn(speaker: speaker, text: trimmed, isFinal: true))
         }
