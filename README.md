@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="Resources/logo.png" width="128" alt="ClueLiz logo">
+</p>
+
 # ClueLiz
 
 > Real-time meeting copilot for macOS — live transcription of both sides of a call, instant AI insights in a floating overlay, and a clean summary when the meeting ends.
