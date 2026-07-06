@@ -93,7 +93,7 @@ All three run on your own API keys, entered once and stored in the macOS Keychai
 | Shortcut | Action |
 |---|---|
 | ⌘⇧⏎ | Get Answer — answer whatever is on screen (global, works while other apps are focused) |
-| ⌘⏎ | Send chat message |
+| ⏎ or ⌘⏎ | Send chat message |
 | ⌘, | Settings |
 | ⌘O | Bring the overlay to front |
 
