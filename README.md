@@ -106,7 +106,7 @@ Sessions and summaries are stored as JSON in `~/Library/Application Support/Clue
 ## Privacy & consent
 
 - **What leaves your machine:** meeting audio goes to Deepgram; transcript excerpts, your context files, and (for Get Answer) screenshots go to Gemini; the full transcript goes to Anthropic when a summary is generated. Nothing is sent anywhere else.
-- **What stays local:** session transcripts and summaries (plain JSON on disk), imported file text, and your settings. API keys live in the macOS Keychain.
+- **What stays local:** session transcripts and summaries (plain JSON on disk), imported file text, and your settings. API keys live in the macOS Keychain, with a plain-text backup in `~/Library/Application Support/ClueLiz/.env` (owner-readable only) so they survive reinstalls — delete that file if you'd rather keep keys in the Keychain alone.
 - **Consent:** you are transcribing other people. Recording/transcription laws vary by jurisdiction (some require all-party consent) — tell your participants and check your local rules before using ClueLiz in real meetings.
 
 ## Troubleshooting
