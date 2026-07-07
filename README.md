@@ -80,7 +80,7 @@ SIGN_ID="Developer ID Application: Your Name (TEAMID)" make dmg
 | AI chat | Type in the bottom bar; toggle **Smart** for technical answers |
 | Context files | Settings → *Context files* → add PDFs, docx, txt, Markdown |
 | Meeting domain | Settings → *Meeting domain* — how ambiguous terms and acronyms are interpreted |
-| Overlay transparency | Slider in the header (30–100%) |
+| Overlay transparency | Half-circle menu in the header (40–100%) |
 | Summary | Opens automatically when a session with transcript ends; copy or save as `.md` |
 
 ### Keyboard shortcuts
@@ -89,8 +89,11 @@ SIGN_ID="Developer ID Application: Your Name (TEAMID)" make dmg
 |---|---|
 | ⌘⇧⏎ | Get Answer — answer whatever is on screen (global, works while other apps are focused) |
 | ⌘⏎ | Send chat message |
+| ⌘N | New session (File → New Session) |
+| ⌘⇧E | End session |
 | ⌘, | Settings |
-| ⌘O | Bring the overlay to front |
+| ⌘O | Bring the overlay to front (View → Show Overlay) |
+| ⌘W | Close the focused window |
 
 Sessions and summaries are stored as JSON in `~/Library/Application Support/Clueless/sessions/`.
 

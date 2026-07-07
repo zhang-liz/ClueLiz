@@ -3,7 +3,7 @@ import SwiftUI
 import CluelessCore
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation {
     private(set) var appState: AppState!
     private var overlayPanel: OverlayPanel?
     private var settingsWindow: NSWindow?
@@ -136,20 +136,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func installMenu() {
         let mainMenu = NSMenu()
-        let appMenuItem = NSMenuItem()
-        mainMenu.addItem(appMenuItem)
+
+        func addSubmenu(_ menu: NSMenu) {
+            let item = NSMenuItem()
+            item.submenu = menu
+            mainMenu.addItem(item)
+        }
+
+        // App menu: About, Settings, Services, Hide/Show, Quit.
         let appMenu = NSMenu()
-        appMenuItem.submenu = appMenu
-        appMenu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
-        appMenu.addItem(withTitle: "Show Overlay", action: #selector(showOverlay), keyEquivalent: "o")
+        appMenu.addItem(withTitle: "About Clueless",
+                        action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
+                        keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Quit Clueless", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+            .target = self
+        appMenu.addItem(.separator())
+        let servicesMenu = NSMenu(title: "Services")
+        appMenu.addItem(withTitle: "Services", action: nil, keyEquivalent: "").submenu = servicesMenu
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Hide Clueless", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        let hideOthers = appMenu.addItem(withTitle: "Hide Others",
+                                         action: #selector(NSApplication.hideOtherApplications(_:)),
+                                         keyEquivalent: "h")
+        hideOthers.keyEquivalentModifierMask = [.command, .option]
+        appMenu.addItem(withTitle: "Show All",
+                        action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Quit Clueless",
+                        action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        addSubmenu(appMenu)
+
+        // File: session lifecycle + standard close.
+        let fileMenu = NSMenu(title: "File")
+        fileMenu.addItem(withTitle: "New Session", action: #selector(startSessionAction), keyEquivalent: "n")
+            .target = self
+        let endItem = fileMenu.addItem(withTitle: "End Session",
+                                       action: #selector(endSessionAction), keyEquivalent: "e")
+        endItem.keyEquivalentModifierMask = [.command, .shift]
+        endItem.target = self
+        fileMenu.addItem(.separator())
+        fileMenu.addItem(withTitle: "Close Window",
+                         action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        addSubmenu(fileMenu)
 
         // Standard Edit menu — without it, ⌘V/⌘C/⌘X/⌘A do nothing in any text field.
-        let editMenuItem = NSMenuItem()
-        mainMenu.addItem(editMenuItem)
         let editMenu = NSMenu(title: "Edit")
-        editMenuItem.submenu = editMenu
         editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
         editMenu.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
         editMenu.addItem(.separator())
@@ -157,8 +189,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        addSubmenu(editMenu)
+
+        // View — AppKit appends "Enter Full Screen" to the menu titled "View".
+        let viewMenu = NSMenu(title: "View")
+        viewMenu.addItem(withTitle: "Show Overlay", action: #selector(showOverlay), keyEquivalent: "o")
+            .target = self
+        addSubmenu(viewMenu)
+
+        // Window — assigned to NSApp.windowsMenu so open windows are listed automatically.
+        let windowMenu = NSMenu(title: "Window")
+        windowMenu.addItem(withTitle: "Minimize",
+                           action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowMenu.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+        windowMenu.addItem(.separator())
+        windowMenu.addItem(withTitle: "Bring All to Front",
+                           action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: "")
+        addSubmenu(windowMenu)
+
+        let helpMenu = NSMenu(title: "Help")
+        helpMenu.addItem(withTitle: "Clueless Help", action: #selector(openHelp), keyEquivalent: "?")
+            .target = self
+        addSubmenu(helpMenu)
 
         NSApp.mainMenu = mainMenu
+        NSApp.servicesMenu = servicesMenu
+        NSApp.windowsMenu = windowMenu
+        NSApp.helpMenu = helpMenu
+    }
+
+    @objc private func startSessionAction() {
+        appState.startSession()
+    }
+
+    @objc private func endSessionAction() {
+        appState.endSession()
+    }
+
+    @objc private func openHelp() {
+        NSWorkspace.shared.open(URL(string: "https://github.com/zhang-liz/ClueLiz")!)
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        guard let appState else { return false }
+        switch menuItem.action {
+        case #selector(startSessionAction): return !appState.sessionActive
+        case #selector(endSessionAction): return appState.sessionActive
+        default: return true
+        }
     }
 
     @objc func showOverlay() {

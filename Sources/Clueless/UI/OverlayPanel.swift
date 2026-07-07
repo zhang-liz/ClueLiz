@@ -20,6 +20,12 @@ final class OverlayPanel: NSPanel {
         isReleasedWhenClosed = false
         minSize = NSSize(width: 340, height: 420)
 
+        // HUD chrome: no traffic lights floating over the header. Close via
+        // ⌘W / File → Close Window; reopen with ⌘O.
+        standardWindowButton(.closeButton)?.isHidden = true
+        standardWindowButton(.miniaturizeButton)?.isHidden = true
+        standardWindowButton(.zoomButton)?.isHidden = true
+
         contentView = NSHostingView(rootView: OverlayView().environmentObject(appState))
 
         // Default position: right edge of the main screen.
